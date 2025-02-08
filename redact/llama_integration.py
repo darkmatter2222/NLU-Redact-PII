@@ -18,25 +18,64 @@ class LlamaGenerator:
     @staticmethod
     def extract_valid_sentence(matches, data):
         """
-        Iterates over all JSON code blocks (skipping the first one if there are multiple) and
-        returns the first candidate whose "sentence" value can be parsed.
+        Iterates over all JSON code blocks (skipping the first one if there are multiple), parses each block, 
+        deduplicates candidate sentences, and collects those whose "sentence" value contains all provided 
+        variable values exactly.
         
-        Additionally, if a candidate contains all provided variable values exactly, return it immediately.
-        Otherwise, return the last valid candidate found.
+        This function is verbose: it logs its evaluation process, describes deduplication actions, 
+        and explains how each decision is made.
+        
+        Returns one candidate selected at random among all valid candidates.
+        If no valid candidate is found, returns None.
         """
-        valid_candidate = None
+        import json
+        import random
+
+        valid_candidates = []
+        unique_candidates = set()  # To store unique candidate sentences
+        # Skip the first block if there are multiple code blocks.
         candidates = matches[1:] if len(matches) > 1 else matches
-        for block in candidates:
+        print(f"Total code blocks found: {len(matches)}. Evaluating {len(candidates)} candidate block(s) (skipping the first if multiple).")
+        
+        for idx, block in enumerate(candidates, start=1):
+            print(f"\nEvaluating candidate block {idx}:")
             try:
                 output_json = json.loads(block.strip())
-                if "sentence" in output_json:
-                    candidate = output_json["sentence"]
-                    valid_candidate = candidate  # update fallback candidate
-                    if all(value in candidate for value in data.values()):
-                        return candidate
-            except json.JSONDecodeError:
+                print(" - Successfully parsed JSON from block.")
+            except json.JSONDecodeError as e:
+                print(f" - Failed to parse JSON from block. Error: {e}")
                 continue
-        return valid_candidate
+
+            if "sentence" not in output_json:
+                print(" - JSON does not contain the 'sentence' key. Skipping this block.")
+                continue
+
+            candidate = output_json["sentence"]
+            if candidate in unique_candidates:
+                print(f" - Duplicate candidate sentence found. Skipping duplicate: {candidate}")
+                continue
+            else:
+                unique_candidates.add(candidate)
+                print(f" - Unique candidate sentence added: {candidate}")
+            
+            # Check if all variable values are present in the candidate sentence.
+            missing_values = [value for value in data.values() if value not in candidate]
+            if missing_values:
+                print(" - Candidate is missing the following variable value(s):", missing_values)
+            else:
+                print(" - Candidate contains all required variable values. Adding to valid candidates.")
+                valid_candidates.append(candidate)
+
+        if valid_candidates:
+            selected_candidate = random.choice(valid_candidates)
+            print(f"\nValid candidates found: {len(valid_candidates)}. Randomly selected candidate: {selected_candidate}")
+            return selected_candidate
+        else:
+            print("\nNo valid candidate found that contains all variable values. Returning None.")
+            return None
+
+
+
 
     def generate_sentence(self, data, custom_prompt):
         """

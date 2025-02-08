@@ -40,12 +40,14 @@ generators = {
 
 def build_custom_prompt(data):
     prompt = (
-        "You are an AI assistant. Generate a creative, coherent, and grammatically correct sentence that naturally "
-        "incorporates the following variable values exactly as provided (case-sensitive). Do not modify, omit, or alter any value, "
-        "and do not use placeholders. It is essential that you use the variable values in the exact format provided, including all spaces and punctuation, even if it appears incorrect.\n\n"
-        "Output your answer as exactly one markdown code block tagged as `json` and nothing else. Inside that code block, "
-        "output valid JSON representing an object with a single key \"sentence\" whose value is the generated sentence. "
-        "Do not include any other keys or any text outside the markdown code block.\n\n"
+        """"You are an AI assistant. Your task is to generate a creative, coherent, and grammatically correct sentence that naturally incorporates the following variable values exactly as provided (case-sensitive). You must include each variable value exactly as provided, including all spaces, punctuation, and special characters. Do not modify, omit, or alter any value.
+
+IMPORTANT:
+1. You are permitted to internally generate and consider several variants. However, your final answer must be exactly one markdown code block tagged with `json` and nothing else.
+2. Inside that markdown code block, output valid JSON representing an object with a single key "sentence". The value associated with the "sentence" key must be the generated sentence.
+3. Do not include any other keys or any additional text outside the code block.
+4. Before submitting, ensure that every variable value below appears exactly as provided in your sentence. Do not use placeholders or additional keys.
+"""
         "The variable values are:\n"
     )
     for key, value in data.items():
@@ -67,32 +69,60 @@ def main():
     file_path = r"O:\master_data_collection\redact\synthetic_data.json"
     writer = SyntheticDataWriter(file_path)
     
+    # Scoreboard to keep track of actions.
+    score = {
+        "iterations": 0,
+        "fields_generated": 0,
+        "validation_success": 0,
+        "validation_failure": 0,
+        "entries_appended": 0,
+    }
+    
     while True:
+        score["iterations"] += 1
         try:
             # Randomly decide how many fields to generate (between 1 and 5).
             num_fields = random.randint(1, 5)
             selected_fields = random.sample(list(generators.keys()), num_fields)
     
             data = {}  # Holds field names and their (possibly noised) values.
-            print("Generated Fields:")
+            print("\nGenerated Fields:")
             for field in selected_fields:
                 raw_value = generators[field]()
                 noisy_value = add_noise(raw_value)
                 data[field] = noisy_value
                 print(f"- {field}: {noisy_value}")
+            
+            # Update score for fields generated in this iteration.
+            score["fields_generated"] += len(data)
+            
+            # Pretty-print the scoreboard table just before building the custom prompt.
+            try:
+                from tabulate import tabulate
+                table_data = [
+                    ["Iteration", score["iterations"]],
+                    ["Fields this Iteration", len(data)],
+                    ["Total Fields Generated", score["fields_generated"]],
+                    ["Validation Successes", score["validation_success"]],
+                    ["Validation Failures", score["validation_failure"]],
+                    ["Entries Appended", score["entries_appended"]],
+                ]
+                print("\nScoreboard:")
+                print(tabulate(table_data, headers=["Metric", "Value"], tablefmt="pretty"))
+            except ImportError:
+                # Fallback if tabulate isn't installed.
+                print("\nScoreboard:")
+                print(f"Iteration: {score['iterations']}")
+                print(f"Fields this Iteration: {len(data)}")
+                print(f"Total Fields Generated: {score['fields_generated']}")
+                print(f"Validation Successes: {score['validation_success']}")
+                print(f"Validation Failures: {score['validation_failure']}")
+                print(f"Entries Appended: {score['entries_appended']}")
     
-            if not data:
-                print("\nNo variables generated. Retrying...\n")
-                continue
-    
+            # Build custom prompt.
             custom_prompt = build_custom_prompt(data)
     
             sentence, raw_llm_output = llama.generate_sentence(data, custom_prompt=custom_prompt)
-    
-            print("\nLLM Generated Sentence (raw output):")
-            print(raw_llm_output)
-            print("\nParsed Sentence from JSON:")
-            print(sentence)
     
             missing = validate_sentence(sentence, data)
             if missing:
@@ -100,20 +130,24 @@ def main():
                 for key, value in missing:
                     print(f"- {key}: {value}")
                 print("Retrying...\n")
-                continue  # try again
+                score["validation_failure"] += 1
+                continue  # Try again.
             else:
                 print("\nValidation SUCCESSFUL: all variable values are present in the sentence.")
+                score["validation_success"] += 1
     
             # Build the entry and append it to the JSON file.
             entry = build_entry(sentence, data)
             writer.append_entry(entry)
             print("Entry appended to synthetic_data.json.\n")
+            score["entries_appended"] += 1
             
         except Exception as e:
             print(f"An error occurred: {e}. Retrying...\n")
         
         # Optionally, wait a moment before the next iteration.
         # For example: time.sleep(1)
+
 
 if __name__ == '__main__':
     main()
