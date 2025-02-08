@@ -3,6 +3,7 @@ import json
 import math
 import time
 import random
+import textwrap
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -45,21 +46,51 @@ def get_sample_by_sentence(sentence, raw_data):
     return None
 
 # -----------------------------
-# PIL-Based Highlighted Text Image Generator
+# Helper: Convert entity dictionaries to tuple format
 # -----------------------------
-def get_highlighted_text_image(text, entities):
+def convert_entities(entities):
     """
-    Creates and returns a PIL Image with the given text rendered word-by-word.
-    If a word exactly matches an entity (using a fallback on available fields),
-    that word is drawn over a pastel rounded rectangle with the category label below.
+    Converts a list of entity dictionaries into a list of tuples (entity_text, category).
+    It first looks for a "word" field; if not found, then for a "text" field.
     """
-    # Define image dimensions
+    converted = []
+    for ent in entities:
+        if isinstance(ent, dict):
+            if "word" in ent:
+                converted.append((ent["word"], ent["category"]))
+            elif "text" in ent:
+                converted.append((ent["text"], ent["category"]))
+            else:
+                # If no token is provided, skip this entity.
+                continue
+        else:
+            # Assume already in tuple form.
+            converted.append(ent)
+    return converted
+
+# -----------------------------
+# PIL-Based Highlighted Text Image Generator Using Wrapping
+# -----------------------------
+def get_highlighted_text_image_wrapped(text, entities):
+    """
+    Creates and returns a PIL Image that renders the full text using text wrapping.
+    For each wrapped line, if an entity phrase appears (as a substring), that substring is
+    highlighted with a pastel-colored rounded rectangle and its category label is drawn below.
+    
+    Parameters:
+      text: The full text to render.
+      entities: A list of tuples (entity_text, category). (Entity phrases may contain spaces.)
+    """
+    # Define image dimensions and wrapping parameters
     img_width = 1000
-    img_height = 300
+    wrap_width = 80  # maximum number of characters per line
+    wrapped_lines = textwrap.wrap(text, width=wrap_width)
+    line_height = 30
+    img_height = 40 + line_height * len(wrapped_lines)
+    
     img = Image.new("RGB", (img_width, img_height), "white")
     draw = ImageDraw.Draw(img)
     
-    # Load fonts (try Arial; if not available, use default)
     try:
         font = ImageFont.truetype("arial.ttf", 18)
         font_small = ImageFont.truetype("arial.ttf", 14)
@@ -67,7 +98,7 @@ def get_highlighted_text_image(text, entities):
         font = ImageFont.load_default()
         font_small = ImageFont.load_default()
     
-    # Define pastel colors for categories
+    # Define pastel colors for categories.
     colors = {
         "People Name": "#FFB6C1",   # Light Pink
         "Card Number": "#FFD700",   # Gold
@@ -82,61 +113,37 @@ def get_highlighted_text_image(text, entities):
         "Email Address": "#87CEEB",   # Sky Blue
         "IP Number": "#20B2AA",   # Light Sea Green
         "Passport": "#A020F0",   # Purple
-        "Driver License": "#D2691E"   # Chocolate
+        "Driver License": "#D2691E",   # Chocolate,
+        "Organization": "#C0C0C0"  # Silver
     }
     
-    # Build a list of entity tuples: (entity_text, category)
-    # If the entity dictionary has "start", use it; otherwise, try "word" or "text".
-    entity_tuples = []
-    if entities and isinstance(entities[0], dict):
-        if "start" in entities[0]:
-            entity_tuples = [(text[ent["start"]:ent["end"]], ent["category"]) for ent in entities]
-        elif "word" in entities[0]:
-            entity_tuples = [(ent["word"], ent["category"]) for ent in entities]
-        elif "text" in entities[0]:
-            entity_tuples = [(ent["text"], ent["category"]) for ent in entities]
-        else:
-            entity_tuples = []
-    else:
-        # Assume entities is already a list of tuples
-        entity_tuples = entities
-
-    # Split text into words
-    words = text.split()
-    x, y = 20, 50  # Starting position
-    line_height = 40  # Space between lines
-    
-    for word in words:
-        # Check for an exact match with one of the entity words
-        category = next((cat for w, cat in entity_tuples if w == word), None)
-        
-        # Get word size using textbbox
-        word_bbox = draw.textbbox((0, 0), word, font=font)
-        word_width = word_bbox[2] - word_bbox[0]
-        word_height = word_bbox[3] - word_bbox[1]
-        
-        if category is not None:
-            # Draw a rounded rectangle behind the word
-            rect_x1, rect_y1 = x - 5, y - 5
-            rect_x2, rect_y2 = x + word_width + 5, y + word_height + 5
-            draw.rounded_rectangle(
-                [(rect_x1, rect_y1), (rect_x2, rect_y2)],
-                fill=colors.get(category, "#FFB6C1"),
-                radius=8
-            )
-            draw.text((x, y), word, fill="black", font=font)
-            # Draw the category label below the word in a smaller gray font
-            cat_bbox = draw.textbbox((0, 0), category, font=font_small)
-            draw.text((x, y + word_height + 5), category, fill="gray", font=font_small)
-        else:
-            draw.text((x, y), word, fill="black", font=font)
-        
-        x += word_width + 20
-        # Wrap text to next line if needed
-        if x > img_width - 100:
-            x = 20
-            y += line_height + 15
-            
+    # We assume entities is a list of tuples (entity_text, category)
+    y = 20
+    for line in wrapped_lines:
+        x = 20
+        # Draw the line normally first.
+        draw.text((x, y), line, fill="black", font=font)
+        # For each entity, check if it appears in this line.
+        for entity_text, category in entities:
+            index = line.find(entity_text)
+            if index != -1:
+                # Compute x coordinate of the entity substring within the line.
+                prefix = line[:index]
+                prefix_bbox = draw.textbbox((0, 0), prefix, font=font)
+                x_start = x + (prefix_bbox[2] - prefix_bbox[0])
+                # Compute the size of the entity substring.
+                entity_bbox = draw.textbbox((0, 0), entity_text, font=font)
+                entity_width = entity_bbox[2] - entity_bbox[0]
+                entity_height = entity_bbox[3] - entity_bbox[1]
+                # Draw a rounded rectangle behind the entity.
+                padding = 2
+                rect = [x_start - padding, y - padding, x_start + entity_width + padding, y + entity_height + padding]
+                draw.rounded_rectangle(rect, fill=colors.get(category, "#FFB6C1"), radius=5)
+                # Redraw the entity text on top.
+                draw.text((x_start, y), entity_text, fill="black", font=font)
+                # Draw the category label below the entity in a smaller gray font.
+                draw.text((x_start, y + entity_height + 2), category, fill="gray", font=font_small)
+        y += line_height
     return img
 
 # -----------------------------
@@ -227,7 +234,7 @@ def train_model(model, train_dataset, val_dataset, epochs=25):
     return history
 
 # -----------------------------
-# Combined Post-Training Charts and Tables
+# Combined Post-Training Charts and Master JPEG
 # -----------------------------
 def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pred, categories,
                                        train_labels, val_labels, val_sentences, model, raw_data,
@@ -357,23 +364,34 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
     ax_perf.set_title("Inference Performance Metrics by Sentence Length Bin")
     ax_perf.legend()
 
-    # Row 6: Embed the PIL-generated Highlighted Text Image into the Master JPEG
+    # Row 6: Embed a PIL-generated highlighted text image using text wrapping.
     ax_highlight = fig.add_subplot(gs[6, :])
     ax_highlight.axis("off")
-    # Look for a sample sentence in the validation set that has entity info.
     sample_sentence = None
-    sample_entities = None
+    sample_info = None
+    # Search for a sample sentence in the validation set with entity info.
     for sent in val_sentences:
-        sample_info = get_sample_by_sentence(sent, raw_data)
-        if sample_info and "entities" in sample_info and sample_info["entities"]:
+        info = get_sample_by_sentence(sent, raw_data)
+        if info and "entities" in info and info["entities"]:
             sample_sentence = sent
-            sample_entities = sample_info["entities"]
+            sample_info = info
             break
     if sample_sentence is not None:
-        pil_img = get_highlighted_text_image(sample_sentence, sample_entities)
+        sample_sentence = str(sample_sentence)  # ensure plain Python string
+        # Get the model's prediction for the sample sentence.
+        pred = model.predict([sample_sentence])[0]
+        pred_binary = (pred >= 0.5).astype(int)
+        predicted_categories = [categories[i] for i, val in enumerate(pred_binary) if val == 1]
+        # Filter the ground-truth entities: only keep those whose category is predicted.
+        orig_entities = sample_info["entities"]
+        filtered_entities = [ent for ent in orig_entities if ent.get("category") in predicted_categories]
+        if not filtered_entities:
+            filtered_entities = orig_entities
+        filtered_entities = convert_entities(filtered_entities)
+        pil_img = get_highlighted_text_image_wrapped(sample_sentence, filtered_entities)
         img_array = np.array(pil_img)
         ax_highlight.imshow(img_array)
-        ax_highlight.set_title("Highlighted Sample Text", fontsize=12, fontweight="bold")
+        ax_highlight.set_title("Predicted Highlighted Sample Text", fontsize=12, fontweight="bold")
     else:
         ax_highlight.text(0.5, 0.5, "No sample with entity info", horizontalalignment="center", verticalalignment="center")
     
