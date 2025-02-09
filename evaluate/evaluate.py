@@ -145,19 +145,26 @@ class ModelEvaluator:
             json.dump(performance_metrics, f, indent=4)
         print(f"[INFO] Performance metrics saved to {metrics_path}")
 
-        # Create a dummy history object since no training history is available.
-        dummy_history = {
-            "loss": [eval_results[0]],
-            "accuracy": [eval_results[1]],
-            "precision": [eval_results[2]],
-            "recall": [eval_results[3]],
-            "val_loss": [eval_results[0]],
-            "val_accuracy": [eval_results[1]],
-            "val_precision": [eval_results[2]],
-            "val_recall": [eval_results[3]]
-        }
+        # Instead of creating a dummy history object from eval metrics, try to load the training stats.
+        training_stats_path = os.path.join(self.root_dir, "training_stats.json")
+        if os.path.exists(training_stats_path):
+            print("[INFO] Found training statistics file. Loading training history...")
+            with open(training_stats_path, "r") as f:
+                training_history = json.load(f)
+        else:
+            print("[WARNING] Training statistics file not found. Using evaluation metrics as training history.")
+            training_history = {
+                "loss": [eval_results[0]],
+                "accuracy": [eval_results[1]],
+                "precision": [eval_results[2]],
+                "recall": [eval_results[3]],
+                "val_loss": [eval_results[0]],
+                "val_accuracy": [eval_results[1]],
+                "val_precision": [eval_results[2]],
+                "val_recall": [eval_results[3]]
+            }
         class DummyHistory:
-            history = dummy_history
+            history = training_history
         dummy_history_obj = DummyHistory()
 
         # Use the ChartPlotter class (from charting.py) to generate charts.

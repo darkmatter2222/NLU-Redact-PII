@@ -10,7 +10,6 @@ import tensorflow as tf
 import tensorflow_hub as hub
 import tensorflow_text  # Registers the custom op 'CaseFoldUTF8'
 
-
 from sklearn.model_selection import train_test_split
 
 # -----------------------------
@@ -121,21 +120,31 @@ def main():
         "Passport", "Driver License"
     ]
     
+    # Load and preprocess the data.
     raw_data = load_data(data_file)
     sentences, labels = preprocess_data(raw_data, categories)
     train_dataset, val_dataset, sentences_train, sentences_val, labels_train, labels_val = create_datasets(sentences, labels, batch_size=16)
     
+    # Save the category labels.
     with open(labels_save_path, "w") as f:
         json.dump(categories, f, indent=4)
     print(f"[INFO] Labels saved to {labels_save_path}")
     
+    # Build and train the model.
     model = build_model(num_categories=len(categories))
-    history = train_model(model, train_dataset, val_dataset, epochs=1)
+    history = train_model(model, train_dataset, val_dataset, epochs=2)
     
+    # Save the training statistics to a JSON file.
+    training_stats_path = os.path.join(OUTPUT_DIR, "training_stats.json")
+    with open(training_stats_path, "w") as f:
+        json.dump(history.history, f, indent=4)
+    print(f"[INFO] Training statistics saved to {training_stats_path}")
+    
+    # Save the final trained model.
     model.save(model_save_path)
     print(f"[INFO] Final model saved to {model_save_path}")
     
-    # Use the evaluation class from evaluate.py to run evaluation.
+    # Use the evaluation class from evaluate.py to run evaluation and charting.
     from evaluate.evaluate import ModelEvaluator
     evaluator = ModelEvaluator(
         root_dir=OUTPUT_DIR,
