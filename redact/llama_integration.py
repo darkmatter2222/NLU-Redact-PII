@@ -4,7 +4,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 class LlamaGenerator:
-    def __init__(self, model_name="meta-llama/Llama-3.2-3B-Instruct", max_new_tokens=1000, do_sample=True, top_p=0.9, temperature=0.7):
+    def __init__(self, model_name="meta-llama/Llama-3.2-3B-Instruct", max_new_tokens=750, do_sample=True, top_p=0.9, temperature=0.7):
         self.model_name = model_name
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(model_name)

@@ -69,13 +69,15 @@ def main():
     file_path = r"O:\master_data_collection\redact\synthetic_data.json"
     writer = SyntheticDataWriter(file_path)
     
-    # Scoreboard to keep track of actions.
+    # Scoreboard to keep track of actions and performance.
     score = {
         "iterations": 0,
         "fields_generated": 0,
         "validation_success": 0,
         "validation_failure": 0,
         "entries_appended": 0,
+        "total_sentence_gen_time": 0.0,  # Total time spent generating sentences (in seconds).
+        "sentence_generation_count": 0,  # Number of sentence generation calls.
     }
     
     start_time = time.time()  # Record the start time for rate calculations.
@@ -111,6 +113,12 @@ def main():
             else:
                 success_rate = failure_rate = 0.0
             
+            # Calculate average sentence generation time in milliseconds.
+            if score["sentence_generation_count"] > 0:
+                avg_sentence_gen_time_ms = (score["total_sentence_gen_time"] / score["sentence_generation_count"]) * 1000
+            else:
+                avg_sentence_gen_time_ms = 0.0
+
             # Pretty-print the scoreboard table just before building the custom prompt.
             try:
                 from tabulate import tabulate
@@ -124,6 +132,7 @@ def main():
                     ["Entries per Minute", f"{entries_per_minute:.2f}"],
                     ["Validation Success Rate", f"{success_rate:.2f}%"],
                     ["Validation Failure Rate", f"{failure_rate:.2f}%"],
+                    ["Avg Sentence Gen Time (ms)", f"{avg_sentence_gen_time_ms:.2f}"]
                 ]
                 print("\nScoreboard:")
                 print(tabulate(table_data, headers=["Metric", "Value"], tablefmt="pretty"))
@@ -139,11 +148,20 @@ def main():
                 print(f"Entries per Minute: {entries_per_minute:.2f}")
                 print(f"Validation Success Rate: {success_rate:.2f}%")
                 print(f"Validation Failure Rate: {failure_rate:.2f}%")
+                print(f"Avg Sentence Gen Time (ms): {avg_sentence_gen_time_ms:.2f}")
     
             # Build custom prompt.
             custom_prompt = build_custom_prompt(data)
     
+            # Time the sentence generation.
+            sentence_gen_start = time.time()
             sentence, raw_llm_output = llama.generate_sentence(data, custom_prompt=custom_prompt)
+            sentence_gen_end = time.time()
+    
+            # Update the sentence generation time KPI.
+            gen_duration = sentence_gen_end - sentence_gen_start
+            score["total_sentence_gen_time"] += gen_duration
+            score["sentence_generation_count"] += 1
     
             missing = validate_sentence(sentence, data)
             if missing:
