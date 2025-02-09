@@ -2,7 +2,6 @@ import os
 import json
 import math
 import time
-import random
 import textwrap
 import numpy as np
 import pandas as pd
@@ -12,8 +11,6 @@ import tensorflow_text  # Registers the custom op 'CaseFoldUTF8'
 import matplotlib.pyplot as plt
 import seaborn as sns
 import matplotlib.gridspec as gridspec
-import matplotlib.colors as mcolors
-from matplotlib.patches import Patch
 from PIL import Image, ImageDraw, ImageFont
 
 from sklearn.model_selection import train_test_split
@@ -22,36 +19,36 @@ from sklearn.metrics import (
     average_precision_score
 )
 
-# -----------------------------
-# Global Output Directory
-# -----------------------------
-OUTPUT_DIR = r"O:\master_model_collection\redact\v1"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# -------------------------------------------------------------------
+# Directories and File Paths
+# -------------------------------------------------------------------
+ROOT_DIR = r"O:\master_model_collection\redact\v1"
+MODEL_SAVE_PATH = os.path.join(ROOT_DIR, "final_model.h5")
+LABELS_SAVE_PATH = os.path.join(ROOT_DIR, "labels.json")
+DATA_FILE = r"O:\master_data_collection\redact\synthetic_data.json"
 
-# -----------------------------
-# Helper Function for Sentence Length Bins
-# -----------------------------
+# New folder for evaluation outputs
+EVAL_DIR = os.path.join(ROOT_DIR, "EVAL")
+os.makedirs(EVAL_DIR, exist_ok=True)
+
+# -------------------------------------------------------------------
+# Helper Functions (Adapted from your training code)
+# -------------------------------------------------------------------
 def get_bin_label(sentence_length, bin_size=5):
     low = (sentence_length // bin_size) * bin_size
     high = low + bin_size - 1
     return f"{low}-{high}"
 
-# -----------------------------
-# Utility: Get sample from raw data by sentence string
-# -----------------------------
 def get_sample_by_sentence(sentence, raw_data):
     for sample in raw_data:
         if sample.get("sentence", "") == sentence:
             return sample
     return None
 
-# -----------------------------
-# Helper: Convert entity dictionaries to tuple format
-# -----------------------------
 def convert_entities(entities):
     """
     Converts a list of entity dictionaries into a list of tuples (entity_text, category).
-    It first looks for a "word" field; if not found, then for a "text" field.
+    Now also checks for an "address" key if the category is Residential Address.
     """
     converted = []
     for ent in entities:
@@ -60,104 +57,91 @@ def convert_entities(entities):
                 converted.append((ent["word"], ent["category"]))
             elif "text" in ent:
                 converted.append((ent["text"], ent["category"]))
+            # If the entity is a residential address, check for an "address" key.
+            elif ent.get("category") == "Residential Address" and "address" in ent:
+                converted.append((ent["address"], ent["category"]))
             else:
-                # If no token is provided, skip this entity.
                 continue
         else:
-            # Assume already in tuple form.
             converted.append(ent)
     return converted
 
-# -----------------------------
-# PIL-Based Highlighted Text Image Generator Using Wrapping
-# -----------------------------
 def get_highlighted_text_image_wrapped(text, entities):
     """
-    Creates and returns a PIL Image that renders the full text using text wrapping.
-    For each wrapped line, if an entity phrase appears (as a substring), that substring is
-    highlighted with a pastel-colored rounded rectangle and its category label is drawn below.
+    Returns a PIL Image rendering the text with wrapped lines.
+    Any substring matching an entity is highlighted with a pastel-colored rounded rectangle,
+    and its category is drawn below the text.
     
-    Parameters:
-      text: The full text to render.
-      entities: A list of tuples (entity_text, category). (Entity phrases may contain spaces.)
+    Updates:
+      - Increased wrap_width from 80 to 120.
+      - Increased line_height from 30 to 40.
+      - Increased font sizes (primary from 18 to 24 and secondary from 14 to 18).
     """
-    # Define image dimensions and wrapping parameters
     img_width = 1000
-    wrap_width = 80  # maximum number of characters per line
+    wrap_width = 120  # increased to reduce unwanted wrapping for longer texts (e.g., addresses)
     wrapped_lines = textwrap.wrap(text, width=wrap_width)
-    line_height = 30
+    line_height = 40  # increased for bigger font spacing
     img_height = 40 + line_height * len(wrapped_lines)
     
     img = Image.new("RGB", (img_width, img_height), "white")
     draw = ImageDraw.Draw(img)
     
     try:
-        font = ImageFont.truetype("arial.ttf", 18)
-        font_small = ImageFont.truetype("arial.ttf", 14)
+        font = ImageFont.truetype("arial.ttf", 24)  # bigger primary font
+        font_small = ImageFont.truetype("arial.ttf", 18)  # bigger secondary font
     except IOError:
         font = ImageFont.load_default()
         font_small = ImageFont.load_default()
     
     # Define pastel colors for categories.
     colors = {
-        "People Name": "#FFB6C1",   # Light Pink
-        "Card Number": "#FFD700",   # Gold
-        "Account Number": "#FFA07A",   # Light Salmon
-        "Social Security Number": "#FA8072",   # Salmon
-        "Government ID Number": "#FF8C00",   # Dark Orange
-        "Date of Birth": "#98FB98",   # Pale Green
-        "Password": "#8A2BE2",   # Blue Violet
-        "Tax ID Number": "#DC143C",   # Crimson
-        "Phone Number": "#32CD32",   # Lime Green
-        "Residential Address": "#4682B4",   # Steel Blue
-        "Email Address": "#87CEEB",   # Sky Blue
-        "IP Number": "#20B2AA",   # Light Sea Green
-        "Passport": "#A020F0",   # Purple
-        "Driver License": "#D2691E",   # Chocolate,
-        "Organization": "#C0C0C0"  # Silver
+        "People Name": "#FFB6C1",
+        "Card Number": "#FFD700",
+        "Account Number": "#FFA07A",
+        "Social Security Number": "#FA8072",
+        "Government ID Number": "#FF8C00",
+        "Date of Birth": "#98FB98",
+        "Password": "#8A2BE2",
+        "Tax ID Number": "#DC143C",
+        "Phone Number": "#32CD32",
+        "Residential Address": "#4682B4",
+        "Email Address": "#87CEEB",
+        "IP Number": "#20B2AA",
+        "Passport": "#A020F0",
+        "Driver License": "#D2691E",
+        "Organization": "#C0C0C0"
     }
     
-    # We assume entities is a list of tuples (entity_text, category)
     y = 20
     for line in wrapped_lines:
         x = 20
-        # Draw the line normally first.
         draw.text((x, y), line, fill="black", font=font)
         # For each entity, check if it appears in this line.
         for entity_text, category in entities:
             index = line.find(entity_text)
             if index != -1:
-                # Compute x coordinate of the entity substring within the line.
                 prefix = line[:index]
                 prefix_bbox = draw.textbbox((0, 0), prefix, font=font)
                 x_start = x + (prefix_bbox[2] - prefix_bbox[0])
-                # Compute the size of the entity substring.
                 entity_bbox = draw.textbbox((0, 0), entity_text, font=font)
                 entity_width = entity_bbox[2] - entity_bbox[0]
                 entity_height = entity_bbox[3] - entity_bbox[1]
-                # Draw a rounded rectangle behind the entity.
                 padding = 2
                 rect = [x_start - padding, y - padding, x_start + entity_width + padding, y + entity_height + padding]
                 draw.rounded_rectangle(rect, fill=colors.get(category, "#FFB6C1"), radius=5)
-                # Redraw the entity text on top.
                 draw.text((x_start, y), entity_text, fill="black", font=font)
-                # Draw the category label below the entity in a smaller gray font.
                 draw.text((x_start, y + entity_height + 2), category, fill="gray", font=font_small)
         y += line_height
     return img
 
-# -----------------------------
-# Data Loading and Preprocessing
-# -----------------------------
 def load_data(data_file):
-    print("[INFO] Loading synthetic data from:", data_file)
+    print("[INFO] Loading data from:", data_file)
     with open(data_file, "r", encoding="utf-8") as f:
         data = json.load(f)
     print(f"[INFO] Loaded {len(data)} samples.")
     return data
 
 def preprocess_data(data, categories):
-    print("[INFO] Preprocessing data...")
     cat_to_idx = {cat: i for i, cat in enumerate(categories)}
     num_categories = len(categories)
     sentences = []
@@ -171,84 +155,44 @@ def preprocess_data(data, categories):
                 label_vector[cat_to_idx[cat]] = 1.0
         sentences.append(sentence)
         labels.append(label_vector)
-    sentences = np.array(sentences)
-    labels = np.array(labels)
-    print(f"[INFO] Preprocessing complete. Total sentences: {len(sentences)}. Labels shape: {labels.shape}")
-    return sentences, labels
+    return np.array(sentences), np.array(labels)
 
 def create_datasets(sentences, labels, batch_size=16):
-    print("[INFO] Splitting data into training and validation sets (80/20 split)...")
     sentences_train, sentences_val, labels_train, labels_val = train_test_split(
         sentences, labels, test_size=0.20, random_state=42
     )
-    print(f"[INFO] Training samples: {len(sentences_train)}, Validation samples: {len(sentences_val)}")
-    
     train_dataset = tf.data.Dataset.from_tensor_slices((sentences_train, labels_train))
     train_dataset = train_dataset.shuffle(buffer_size=len(sentences_train)).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-    
     val_dataset = tf.data.Dataset.from_tensor_slices((sentences_val, labels_val))
     val_dataset = val_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
-    
-    print("[INFO] tf.data.Datasets created.")
     return train_dataset, val_dataset, sentences_train, sentences_val, labels_train, labels_val
 
-# -----------------------------
-# Model Building
-# -----------------------------
-def build_model(num_categories):
-    print("[INFO] Building the BERT + CNN model...")
-    preprocess_url = "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3"
-    encoder_url = "https://tfhub.dev/tensorflow/bert_en_uncased_L-12_H-768_A-12/3"
-
-    text_input = tf.keras.layers.Input(shape=(), dtype=tf.string, name="text_input")
-    print("[INFO] Loading BERT preprocessing layer from TF Hub...")
-    preprocessing_layer = hub.KerasLayer(preprocess_url, name="preprocessing")
-    encoder_inputs = preprocessing_layer(text_input)
-    print("[INFO] Loading BERT encoder layer from TF Hub...")
-    bert_encoder = hub.KerasLayer(encoder_url, trainable=True, name="BERT_encoder")
-    bert_outputs = bert_encoder(encoder_inputs)
-    sequence_output = bert_outputs["sequence_output"]
-    
-    conv = tf.keras.layers.Conv1D(filters=128, kernel_size=3, activation="relu", name="conv1d")(sequence_output)
-    pool = tf.keras.layers.GlobalMaxPooling1D(name="global_max_pool")(conv)
-    dropout = tf.keras.layers.Dropout(0.1, name="dropout")(pool)
-    output = tf.keras.layers.Dense(num_categories, activation="sigmoid", name="output")(dropout)
-    
-    model = tf.keras.Model(inputs=text_input, outputs=output)
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=2e-6),
-        loss="binary_crossentropy",
-        metrics=["accuracy", tf.keras.metrics.Precision(name="precision"), tf.keras.metrics.Recall(name="recall")]
-    )
-    print("[INFO] Model built successfully. Model summary:")
-    model.summary(print_fn=lambda x: print("[MODEL] " + x))
-    return model
-
-# -----------------------------
-# Training
-# -----------------------------
-def train_model(model, train_dataset, val_dataset, epochs=25):
-    print(f"[INFO] Starting training for {epochs} epochs...")
-    history = model.fit(train_dataset, validation_data=val_dataset, epochs=epochs)
-    print("[INFO] Training complete.")
-    return history
-
-# -----------------------------
-# Combined Post-Training Charts and Master JPEG
-# -----------------------------
+# -------------------------------------------------------------------
+# Updated Plotting Function with an Even Grid for Highlighted Samples
+# -------------------------------------------------------------------
 def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pred, categories,
                                        train_labels, val_labels, val_sentences, model, raw_data,
                                        output_dir, threshold=0.5, bin_size=5):
-    print("[INFO] Creating combined post-training charts...")
-    y_pred_binary = (y_pred >= threshold).astype(int)
+    """
+    Generates a multi-panel chart including training history, various metrics,
+    and an evenly spaced grid (2 columns x 3 rows) of predicted highlighted sample texts.
+    """
     num_categories = len(categories)
+    y_pred_binary = (y_pred >= threshold).astype(int)
     num_conf_rows = math.ceil(num_categories / 4)
-    total_rows = 7 + num_conf_rows
+
+    # --- Define grid layout ---
+    # Rows 0-5: other charts (same as before)
+    # Rows 6-8: Grid of highlighted text samples (3 rows x 2 columns = 6 cells)
+    # Rows 9 onward: Confusion matrices for each category
+    HIGHLIGHT_ROWS = 3
+    base_conf = 6 + HIGHLIGHT_ROWS  # confusion matrices start at row index 9
+    total_rows = base_conf + num_conf_rows
 
     fig = plt.figure(figsize=(20, 6 * total_rows))
     gs = gridspec.GridSpec(total_rows, 4, figure=fig)
 
-    # Row 0: Training History
+    # Row 0: Training History (4 subplots)
     metrics_list = ["loss", "accuracy", "precision", "recall"]
     for i, metric in enumerate(metrics_list):
         ax = fig.add_subplot(gs[0, i])
@@ -268,7 +212,7 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
     ax_dist.set_ylabel("Count")
     ax_dist.set_title("Sample Count per Category")
 
-    # Row 2: Entity Category vs. Binned Sentence Length Heatmap
+    # Row 2: Heatmap of Entity Category vs. Binned Sentence Length
     counts_dict = {}
     for sample in raw_data:
         sentence = sample.get("sentence", "")
@@ -288,7 +232,7 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
     ax_heat.set_xlabel("Entity Category")
     ax_heat.set_ylabel("Sentence Length Bins (words)")
     ax_heat.set_title("Heatmap: Entity Category vs. Binned Sentence Length")
-    
+
     # Row 3: Per-Category Metrics Table
     per_cat_data = []
     for i, cat in enumerate(categories):
@@ -332,7 +276,7 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
     ax_bar.set_title("Training/Validation Dataset & Category Balance")
     ax_bar.legend()
 
-    # Row 5: Inference Performance Bar Chart
+    # Row 5: Inference Performance Bar Chart by Sentence Length Bin
     bin_times = {}
     bin_cat_counts = {}
     for sentence in val_sentences:
@@ -364,40 +308,51 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
     ax_perf.set_title("Inference Performance Metrics by Sentence Length Bin")
     ax_perf.legend()
 
-    # Row 6: Embed a PIL-generated highlighted text image using text wrapping.
-    ax_highlight = fig.add_subplot(gs[6, :])
-    ax_highlight.axis("off")
-    sample_sentence = None
-    sample_info = None
-    # Search for a sample sentence in the validation set with entity info.
+    # --- Rows 6-8: Even Grid of Predicted Highlighted Text Samples ---
+    # Display up to 6 samples (2 columns x 3 rows).
+    HIGHLIGHT_ROWS = 3
+    HIGHLIGHT_COLS = 2
+    max_highlights = HIGHLIGHT_ROWS * HIGHLIGHT_COLS
+    highlight_samples = []
     for sent in val_sentences:
         info = get_sample_by_sentence(sent, raw_data)
         if info and "entities" in info and info["entities"]:
-            sample_sentence = sent
-            sample_info = info
+            highlight_samples.append((sent, info))
+        if len(highlight_samples) >= max_highlights:
             break
-    if sample_sentence is not None:
-        sample_sentence = str(sample_sentence)  # ensure plain Python string
-        # Get the model's prediction for the sample sentence.
-        pred = model.predict([sample_sentence])[0]
-        pred_binary = (pred >= 0.5).astype(int)
-        predicted_categories = [categories[i] for i, val in enumerate(pred_binary) if val == 1]
-        # Filter the ground-truth entities: only keep those whose category is predicted.
-        orig_entities = sample_info["entities"]
-        filtered_entities = [ent for ent in orig_entities if ent.get("category") in predicted_categories]
-        if not filtered_entities:
-            filtered_entities = orig_entities
-        filtered_entities = convert_entities(filtered_entities)
-        pil_img = get_highlighted_text_image_wrapped(sample_sentence, filtered_entities)
-        img_array = np.array(pil_img)
-        ax_highlight.imshow(img_array)
-        ax_highlight.set_title("Predicted Highlighted Sample Text", fontsize=12, fontweight="bold")
-    else:
-        ax_highlight.text(0.5, 0.5, "No sample with entity info", horizontalalignment="center", verticalalignment="center")
-    
-    # Rows 7+: Confusion Matrices for Each Category
+
+    # Create subplots that span 2 columns each.
+    for idx in range(max_highlights):
+        row_idx = 6 + (idx // HIGHLIGHT_COLS)
+        col_idx = idx % HIGHLIGHT_COLS
+        if col_idx == 0:
+            ax = fig.add_subplot(gs[row_idx, 0:2])
+        else:
+            ax = fig.add_subplot(gs[row_idx, 2:4])
+        ax.axis("off")
+        if idx < len(highlight_samples):
+            sample_sentence, sample_info = highlight_samples[idx]
+            sample_sentence = str(sample_sentence)
+            # Get model prediction and determine predicted categories.
+            pred = model.predict([sample_sentence])[0]
+            pred_binary = (pred >= threshold).astype(int)
+            predicted_categories = [categories[i] for i, val in enumerate(pred_binary) if val == 1]
+            orig_entities = sample_info["entities"]
+            # Optionally filter the entities to only those in the prediction.
+            filtered_entities = [ent for ent in orig_entities if ent.get("category") in predicted_categories]
+            if not filtered_entities:
+                filtered_entities = orig_entities
+            filtered_entities = convert_entities(filtered_entities)
+            pil_img = get_highlighted_text_image_wrapped(sample_sentence, filtered_entities)
+            img_array = np.array(pil_img)
+            ax.imshow(img_array)
+            ax.set_title(f"Sample {idx+1}", fontsize=12)
+        else:
+            ax.text(0.5, 0.5, "No sample", horizontalalignment="center", verticalalignment="center")
+
+    # --- Rows 9 onward: Confusion Matrices for Each Category ---
     for idx, cat in enumerate(categories):
-        row_idx = 7 + idx // 4
+        row_idx = base_conf + (idx // 4)
         col_idx = idx % 4
         ax_cm = fig.add_subplot(gs[row_idx, col_idx])
         cm = confusion_matrix(y_true[:, idx], y_pred_binary[:, idx])
@@ -415,15 +370,16 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
         acc = (TP + TN) / total if total > 0 else 0
         prec = TP / (TP + FP) if (TP + FP) > 0 else 0
         rec = TP / (TP + FN) if (TP + FN) > 0 else 0
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False, ax=ax_cm,
-                    xticklabels=["Pred 0", "Pred 1"], yticklabels=["True 0", "True 1"])
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False,
+                    xticklabels=["Pred 0", "Pred 1"], yticklabels=["True 0", "True 1"], ax=ax_cm)
         ax_cm.set_title(f"{cat}")
         ax_cm.text(0.5, -0.3, f"Acc: {acc:.2f}\nPrec: {prec:.2f}\nRec: {rec:.2f}",
                    fontsize=10, ha="center", transform=ax_cm.transAxes)
     
-    total_conf_plots = num_conf_rows * 4
-    for extra in range(num_categories, total_conf_plots):
-        row_idx = 7 + extra // 4
+    # Turn off any extra subplots in the confusion matrix area.
+    num_conf_plots = num_conf_rows * 4
+    for extra in range(num_categories, num_conf_plots):
+        row_idx = base_conf + (extra // 4)
         col_idx = extra % 4
         ax_empty = fig.add_subplot(gs[row_idx, col_idx])
         ax_empty.axis('off')
@@ -434,12 +390,11 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
     plt.close()
     print(f"[INFO] Combined post-training charts saved to {combined_path}")
 
-# -----------------------------
-# Evaluation with Detailed Metrics & Combined Charts
-# -----------------------------
-def evaluate_model(model, val_dataset, categories, output_dir, history, sentences, labels,
+# -------------------------------------------------------------------
+# Evaluation Function
+# -------------------------------------------------------------------
+def evaluate_model(model, val_dataset, categories, output_dir, sentences, labels,
                    train_labels, val_labels, val_sentences, raw_data, threshold=0.5):
-    print("[INFO] Evaluating the model on the validation set...")
     eval_results = model.evaluate(val_dataset)
     print("\n[RESULTS] Overall Evaluation on Validation Set:")
     print(f"         Loss:      {eval_results[0]:.4f}")
@@ -447,6 +402,7 @@ def evaluate_model(model, val_dataset, categories, output_dir, history, sentence
     print(f"         Precision: {eval_results[2]:.4f}")
     print(f"         Recall:    {eval_results[3]:.4f}")
     
+    # Collect predictions for detailed metrics.
     y_true = []
     y_pred = []
     for texts, batch_labels in val_dataset:
@@ -485,41 +441,51 @@ def evaluate_model(model, val_dataset, categories, output_dir, history, sentence
         json.dump(performance_metrics, f, indent=4)
     print(f"[INFO] Performance metrics saved to {metrics_path}")
     
-    plot_combined_post_training_charts(history, sentences, labels, y_true, y_pred, categories,
-                                       train_labels, val_labels, val_sentences, model, raw_data,
-                                       output_dir, threshold)
+    # Since no training history is available now, create a dummy history object.
+    dummy_history = {
+        "loss": [eval_results[0]],
+        "accuracy": [eval_results[1]],
+        "precision": [eval_results[2]],
+        "recall": [eval_results[3]],
+        "val_loss": [eval_results[0]],
+        "val_accuracy": [eval_results[1]],
+        "val_precision": [eval_results[2]],
+        "val_recall": [eval_results[3]]
+    }
+    class DummyHistory:
+        history = dummy_history
+    dummy_history_obj = DummyHistory()
+    
+    plot_combined_post_training_charts(
+        dummy_history_obj, sentences, labels, y_true, y_pred, categories,
+        train_labels, val_labels, val_sentences, model, raw_data,
+        output_dir, threshold
+    )
 
-# -----------------------------
+# -------------------------------------------------------------------
 # Main Execution
-# -----------------------------
+# -------------------------------------------------------------------
 def main():
-    data_file = r"O:\master_data_collection\redact\synthetic_data.json"
-    model_save_path = os.path.join(OUTPUT_DIR, "final_model.h5")
-    labels_save_path = os.path.join(OUTPUT_DIR, "labels.json")
+    print("[INFO] Starting evaluation...")
+
+    # Load the saved model.
+    print("[INFO] Loading model from:", MODEL_SAVE_PATH)
+    model = tf.keras.models.load_model(MODEL_SAVE_PATH, custom_objects={'KerasLayer': hub.KerasLayer})
     
-    categories = [
-        "People Name", "Card Number", "Account Number", "Social Security Number",
-        "Government ID Number", "Date of Birth", "Password", "Tax ID Number",
-        "Phone Number", "Residential Address", "Email Address", "IP Number",
-        "Passport", "Driver License"
-    ]
+    # Load the category labels.
+    with open(LABELS_SAVE_PATH, "r") as f:
+        categories = json.load(f)
     
-    raw_data = load_data(data_file)
+    # Load and preprocess the raw data.
+    raw_data = load_data(DATA_FILE)
     sentences, labels = preprocess_data(raw_data, categories)
     train_dataset, val_dataset, sentences_train, sentences_val, labels_train, labels_val = create_datasets(sentences, labels, batch_size=16)
     
-    with open(labels_save_path, "w") as f:
-        json.dump(categories, f, indent=4)
-    print(f"[INFO] Labels saved to {labels_save_path}")
-    
-    model = build_model(num_categories=len(categories))
-    history = train_model(model, train_dataset, val_dataset, epochs=50)
-    
-    model.save(model_save_path)
-    print(f"[INFO] Final model saved to {model_save_path}")
-    
-    evaluate_model(model, val_dataset, categories, OUTPUT_DIR, history, sentences, labels,
-                   labels_train, labels_val, sentences_val, raw_data, threshold=0.5)
+    # Evaluate the model and generate output files in the EVAL folder.
+    evaluate_model(
+        model, val_dataset, categories, EVAL_DIR, sentences, labels,
+        labels_train, labels_val, sentences_val, raw_data, threshold=0.5
+    )
 
 if __name__ == "__main__":
     main()
