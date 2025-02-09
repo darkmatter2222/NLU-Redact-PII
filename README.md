@@ -21,6 +21,42 @@ This repository contains a suite of tools for generating synthetic data useful f
 - **Evaluation & Training Modules:**  
   Additional scripts like [`eval_data_balance.py`](eval_data_balance.py) and [`train.py`](train.py) for evaluating data distributions and training models on the synthetic dataset.
 
+## Training Data Format  
+```json
+ [
+   {
+    "sentence": "The credit card number is 6024 1567 5231 8762. Can you please verify if this number is valid?",
+    "entities": [
+      {
+        "text": "6024 1567 5231 8762",
+        "category": "Card Number"
+      }
+    ]
+  },
+  {
+    "sentence": "After verifying her three sIx ONE-EIgHT ONE - zeroeight EIGHT  five social security number, WZERO  THREE  SEvEN  ONESEVEN  nine driver's license, and (THREEsevEN three ) ZERO ninefour - two One seven  FIVe phone number, she presented her C835 43567 passport.",
+    "entities": [
+      {
+        "text": "three sIx ONE-EIgHT ONE - zeroeight EIGHT  five ",
+        "category": "Social Security Number"
+      },
+      {
+        "text": "WZERO  THREE  SEvEN  ONESEVEN  nine ",
+        "category": "Driver License"
+      },
+      {
+        "text": "(THREEsevEN three ) ZERO ninefour - two One seven  FIVe",
+        "category": "Phone Number"
+      },
+      {
+        "text": "C835 43567",
+        "category": "Passport"
+      }
+    ]
+  }
+]
+```
+
 ## How to Run
 
 1. **Data Generation:**  
