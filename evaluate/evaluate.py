@@ -84,7 +84,7 @@ class ModelEvaluator:
         return train_dataset, val_dataset, sentences_train, sentences_val, labels_train, labels_val
 
     def evaluate_model(self, model, val_dataset, categories, sentences, labels,
-                       train_labels, val_labels, sentences_val, raw_data, threshold=0.5):
+                   train_labels, val_labels, sentences_val, raw_data, threshold=0.5):
         """
         Evaluate the model on the validation dataset, compute detailed metrics,
         save the results to a JSON file, and generate charts using ChartPlotter.
@@ -106,15 +106,9 @@ class ModelEvaluator:
         print(f"         Precision: {eval_results[2]:.4f}")
         print(f"         Recall:    {eval_results[3]:.4f}")
 
-        # Collect predictions for detailed metrics.
-        y_true = []
-        y_pred = []
-        for texts, batch_labels in val_dataset:
-            predictions = model.predict(texts)
-            y_true.extend(batch_labels.numpy())
-            y_pred.extend(predictions)
-        y_true = np.array(y_true)
-        y_pred = np.array(y_pred)
+        # Collect predictions and true labels in batch
+        y_pred = model.predict(val_dataset)
+        y_true = np.concatenate([batch.numpy() for _, batch in val_dataset])
         y_pred_binary = (y_pred >= threshold).astype(int)
 
         report_dict = classification_report(
@@ -175,6 +169,7 @@ class ModelEvaluator:
             train_labels, val_labels, sentences_val, model, raw_data,
             self.eval_dir, threshold
         )
+
 
     def run_evaluation(self, threshold=0.5, batch_size=16):
         """
