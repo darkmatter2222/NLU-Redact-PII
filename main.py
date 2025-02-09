@@ -1,4 +1,4 @@
-import random
+import random, time
 # Import data generators and helper functions from your package.
 from redact.data_generators import (
     generate_people_name,
@@ -78,6 +78,8 @@ def main():
         "entries_appended": 0,
     }
     
+    start_time = time.time()  # Record the start time for rate calculations.
+    
     while True:
         score["iterations"] += 1
         try:
@@ -96,6 +98,19 @@ def main():
             # Update score for fields generated in this iteration.
             score["fields_generated"] += len(data)
             
+            # Calculate elapsed time in minutes.
+            elapsed_minutes = (time.time() - start_time) / 60.0
+            # Calculate entries appended per minute (avoid division by zero).
+            entries_per_minute = score["entries_appended"] / elapsed_minutes if elapsed_minutes > 0 else score["entries_appended"]
+            
+            # Calculate validation rates.
+            total_validations = score["validation_success"] + score["validation_failure"]
+            if total_validations > 0:
+                success_rate = (score["validation_success"] / total_validations) * 100
+                failure_rate = (score["validation_failure"] / total_validations) * 100
+            else:
+                success_rate = failure_rate = 0.0
+            
             # Pretty-print the scoreboard table just before building the custom prompt.
             try:
                 from tabulate import tabulate
@@ -106,6 +121,9 @@ def main():
                     ["Validation Successes", score["validation_success"]],
                     ["Validation Failures", score["validation_failure"]],
                     ["Entries Appended", score["entries_appended"]],
+                    ["Entries per Minute", f"{entries_per_minute:.2f}"],
+                    ["Validation Success Rate", f"{success_rate:.2f}%"],
+                    ["Validation Failure Rate", f"{failure_rate:.2f}%"],
                 ]
                 print("\nScoreboard:")
                 print(tabulate(table_data, headers=["Metric", "Value"], tablefmt="pretty"))
@@ -118,6 +136,9 @@ def main():
                 print(f"Validation Successes: {score['validation_success']}")
                 print(f"Validation Failures: {score['validation_failure']}")
                 print(f"Entries Appended: {score['entries_appended']}")
+                print(f"Entries per Minute: {entries_per_minute:.2f}")
+                print(f"Validation Success Rate: {success_rate:.2f}%")
+                print(f"Validation Failure Rate: {failure_rate:.2f}%")
     
             # Build custom prompt.
             custom_prompt = build_custom_prompt(data)
