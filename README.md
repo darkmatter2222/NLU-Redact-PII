@@ -20,7 +20,32 @@ This repository contains a suite of tools for generating synthetic data useful f
 
 - **Evaluation & Training Modules:**  
   Additional scripts like [`eval_data_balance.py`](eval_data_balance.py) and [`train.py`](train.py) for evaluating data distributions and training models on the synthetic dataset.
+  
+## Data Generation Methodology
 
+The data generation process in this repository is designed to simulate a wide range of real-world scenarios by creating both standard and non-standard data formats. Here are the key points of our approach:
+
+- **Diverse Data Types:**  
+  Our generators create various types of sensitive data, including people names, card numbers, account numbers, social security numbers, government IDs, dates of birth, passwords, tax IDs, phone numbers, addresses, email addresses, IP addresses, passports, and driver licenses.
+
+- **Sensitive Data First:**  
+  Sensitive fields are generated initially in isolation. This ensures that a precise and controlled format (or variability) is achieved before these values are incorporated into sentences. This approach helps in constructing data with the desired complexity and edge-case scenarios.
+
+- **LLM Integration for Sentence Generation:**  
+  The pre-generated sensitive data is then provided to a language model (Llama) that builds coherent sentences around these elements. This forces the sentence generation process to account for the intrinsic complexity of the data, ensuring that the resulting sentences accurately reflect both the standard and non-standard formats.
+
+- **Noise Injection:**  
+  An element of randomness and controlled noise is applied to the generated data. Noise may include:
+  - Random variations in letter case.
+  - Insertion or deletion of spaces.
+  - Inclusion of special characters.
+  
+  This intentional introduction of noise simulates real-world data imperfections. From a machine learning standpoint, such variability is crucial as it:
+  - Prevents model overfitting by exposing learning algorithms to a spectrum of input formats.
+  - Improves the robustness and generalization capabilities of models in redaction and anonymization tasks.
+
+This multi-layered methodology ensures that the synthetic dataset is rich, diverse, and challenging enough to support robust testing and training of data anonymization pipelines.
+  
 ## Training Data Format  
 ```json
  [
