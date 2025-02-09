@@ -173,25 +173,21 @@ def create_datasets(sentences, labels, batch_size=16):
 def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pred, categories,
                                        train_labels, val_labels, val_sentences, model, raw_data,
                                        output_dir, threshold=0.5, bin_size=5):
-    """
-    Generates a multi-panel chart including training history, various metrics,
-    and an evenly spaced grid (2 columns x 3 rows) of predicted highlighted sample texts.
-    """
     num_categories = len(categories)
     y_pred_binary = (y_pred >= threshold).astype(int)
     num_conf_rows = math.ceil(num_categories / 4)
 
-    # --- Define grid layout ---
-    # Rows 0-5: other charts (same as before)
-    # Rows 6-8: Grid of highlighted text samples (3 rows x 2 columns = 6 cells)
-    # Rows 9 onward: Confusion matrices for each category
-    HIGHLIGHT_ROWS = 3
-    base_conf = 6 + HIGHLIGHT_ROWS  # confusion matrices start at row index 9
-    total_rows = base_conf + num_conf_rows
+    # Define number of rows for each section:
+    TOP_CHART_ROWS = 6    # Rows 0-5: training history, distribution, heatmap, metrics table, balance, inference performance
+    HIGHLIGHT_ROWS = 4    # Rows 6-9: highlighted samples (4 rows x 2 columns = 8 cells)
+    base_conf = TOP_CHART_ROWS + HIGHLIGHT_ROWS  # Confusion matrices start from this row index
+    total_rows = TOP_CHART_ROWS + HIGHLIGHT_ROWS + num_conf_rows
 
+    # Create figure and gridspec with the new total rows.
     fig = plt.figure(figsize=(20, 6 * total_rows))
     gs = gridspec.GridSpec(total_rows, 4, figure=fig)
 
+    # --- Top Charts (Rows 0-5) ---
     # Row 0: Training History (4 subplots)
     metrics_list = ["loss", "accuracy", "precision", "recall"]
     for i, metric in enumerate(metrics_list):
@@ -308,11 +304,8 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
     ax_perf.set_title("Inference Performance Metrics by Sentence Length Bin")
     ax_perf.legend()
 
-    # --- Rows 6-8: Even Grid of Predicted Highlighted Text Samples ---
-    # Display up to 6 samples (2 columns x 3 rows).
-    HIGHLIGHT_ROWS = 3
-    HIGHLIGHT_COLS = 2
-    max_highlights = HIGHLIGHT_ROWS * HIGHLIGHT_COLS
+    # --- Highlighted Samples Grid (Rows 6-9) ---
+    max_highlights = HIGHLIGHT_ROWS * 2  # 2 columns * 4 rows = 8 samples
     highlight_samples = []
     for sent in val_sentences:
         info = get_sample_by_sentence(sent, raw_data)
@@ -321,10 +314,10 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
         if len(highlight_samples) >= max_highlights:
             break
 
-    # Create subplots that span 2 columns each.
     for idx in range(max_highlights):
-        row_idx = 6 + (idx // HIGHLIGHT_COLS)
-        col_idx = idx % HIGHLIGHT_COLS
+        row_idx = TOP_CHART_ROWS + (idx // 2)  # Rows 6 to 9
+        col_idx = idx % 2
+        # Each sample spans 2 columns.
         if col_idx == 0:
             ax = fig.add_subplot(gs[row_idx, 0:2])
         else:
@@ -333,12 +326,10 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
         if idx < len(highlight_samples):
             sample_sentence, sample_info = highlight_samples[idx]
             sample_sentence = str(sample_sentence)
-            # Get model prediction and determine predicted categories.
             pred = model.predict([sample_sentence])[0]
             pred_binary = (pred >= threshold).astype(int)
             predicted_categories = [categories[i] for i, val in enumerate(pred_binary) if val == 1]
             orig_entities = sample_info["entities"]
-            # Optionally filter the entities to only those in the prediction.
             filtered_entities = [ent for ent in orig_entities if ent.get("category") in predicted_categories]
             if not filtered_entities:
                 filtered_entities = orig_entities
@@ -350,7 +341,7 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
         else:
             ax.text(0.5, 0.5, "No sample", horizontalalignment="center", verticalalignment="center")
 
-    # --- Rows 9 onward: Confusion Matrices for Each Category ---
+    # --- Confusion Matrices (Rows base_conf onward) ---
     for idx, cat in enumerate(categories):
         row_idx = base_conf + (idx // 4)
         col_idx = idx % 4
@@ -384,11 +375,14 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
         ax_empty = fig.add_subplot(gs[row_idx, col_idx])
         ax_empty.axis('off')
     
-    plt.subplots_adjust(hspace=1.0, wspace=0.5)
+    # Adjust spacing to reduce padding while preserving all sections.
+    plt.subplots_adjust(hspace=0.8, wspace=0.5)
+    
     combined_path = os.path.join(output_dir, "combined_post_training_charts.png")
     plt.savefig(combined_path)
     plt.close()
     print(f"[INFO] Combined post-training charts saved to {combined_path}")
+
 
 # -------------------------------------------------------------------
 # Evaluation Function

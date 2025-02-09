@@ -78,6 +78,9 @@ def main():
         "entries_appended": 0,
         "total_sentence_gen_time": 0.0,  # Total time spent generating sentences (in seconds).
         "sentence_generation_count": 0,  # Number of sentence generation calls.
+        "total_input_tokens": 0,         # Total input tokens used.
+        "total_output_tokens": 0,        # Total output tokens generated.
+        "total_tokens": 0,               # Total tokens (input + output).
     }
     
     start_time = time.time()  # Record the start time for rate calculations.
@@ -119,6 +122,9 @@ def main():
             else:
                 avg_sentence_gen_time_ms = 0.0
 
+            # Calculate tokens per minute.
+            tokens_per_minute = score["total_tokens"] / elapsed_minutes if elapsed_minutes > 0 else score["total_tokens"]
+    
             # Pretty-print the scoreboard table just before building the custom prompt.
             try:
                 from tabulate import tabulate
@@ -132,7 +138,11 @@ def main():
                     ["Entries per Minute", f"{entries_per_minute:.2f}"],
                     ["Validation Success Rate", f"{success_rate:.2f}%"],
                     ["Validation Failure Rate", f"{failure_rate:.2f}%"],
-                    ["Avg Sentence Gen Time (ms)", f"{avg_sentence_gen_time_ms:.2f}"]
+                    ["Avg Sentence Gen Time (ms)", f"{avg_sentence_gen_time_ms:.2f}"],
+                    ["Total Input Tokens", score["total_input_tokens"]],
+                    ["Total Output Tokens", score["total_output_tokens"]],
+                    ["Total Tokens", score["total_tokens"]],
+                    ["Tokens per Minute", f"{tokens_per_minute:.2f}"],
                 ]
                 print("\nScoreboard:")
                 print(tabulate(table_data, headers=["Metric", "Value"], tablefmt="pretty"))
@@ -149,20 +159,32 @@ def main():
                 print(f"Validation Success Rate: {success_rate:.2f}%")
                 print(f"Validation Failure Rate: {failure_rate:.2f}%")
                 print(f"Avg Sentence Gen Time (ms): {avg_sentence_gen_time_ms:.2f}")
+                print(f"Total Input Tokens: {score['total_input_tokens']}")
+                print(f"Total Output Tokens: {score['total_output_tokens']}")
+                print(f"Total Tokens: {score['total_tokens']}")
+                print(f"Tokens per Minute: {tokens_per_minute:.2f}")
     
             # Build custom prompt.
             custom_prompt = build_custom_prompt(data)
     
             # Time the sentence generation.
             sentence_gen_start = time.time()
-            sentence, raw_llm_output = llama.generate_sentence(data, custom_prompt=custom_prompt)
+            sentence, raw_llm_output, prompt, input_token_count, output_token_count, total_tokens = llama.generate_sentence(data, custom_prompt=custom_prompt)
             sentence_gen_end = time.time()
+            print("Start Raw Output:")
+            print(raw_llm_output)
+            print("End Raw Output.")
     
             # Update the sentence generation time KPI.
             gen_duration = sentence_gen_end - sentence_gen_start
             score["total_sentence_gen_time"] += gen_duration
             score["sentence_generation_count"] += 1
     
+            # Update token utilization metrics.
+            score["total_input_tokens"] += input_token_count
+            score["total_output_tokens"] += output_token_count
+            score["total_tokens"] += total_tokens
+            
             missing = validate_sentence(sentence, data)
             if missing:
                 print("\nValidation FAILED. The following variables were not found exactly in the sentence:")
@@ -186,6 +208,7 @@ def main():
         
         # Optionally, wait a moment before the next iteration.
         # For example: time.sleep(1)
+
 
 
 if __name__ == '__main__':

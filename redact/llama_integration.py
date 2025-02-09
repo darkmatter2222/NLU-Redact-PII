@@ -75,13 +75,19 @@ class LlamaGenerator:
             return None
 
 
-
-
     def generate_sentence(self, data, custom_prompt):
         """
         Uses the provided custom prompt to generate a sentence.
         The prompt must instruct the model to output exactly one markdown code block tagged as `json`
         containing valid JSON with a single key "sentence".
+        
+        Returns:
+            sentence (str): The extracted sentence.
+            generated_text (str): The full text output by the model.
+            prompt (str): The input prompt used.
+            input_tokens (int): The number of tokens in the input.
+            output_tokens (int): The number of tokens generated.
+            total_tokens (int): The sum of input and output tokens.
         """
         prompt = custom_prompt
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
@@ -99,7 +105,14 @@ class LlamaGenerator:
         if not sentence:
             print("No valid JSON block with a 'sentence' key that contains all variable values was found.")
             sentence = ""
-        return sentence, generated_text
+        
+        # Compute token counts.
+        input_token_count = inputs["input_ids"].shape[1]
+        output_token_count = output_ids.shape[1]
+        total_tokens = input_token_count + output_token_count
+
+        return sentence, generated_text, prompt, input_token_count, output_token_count, total_tokens
+
 
 def validate_sentence(sentence, data):
     """

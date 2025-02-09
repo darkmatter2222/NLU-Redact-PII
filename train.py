@@ -73,75 +73,68 @@ def convert_entities(entities):
 # -----------------------------
 def get_highlighted_text_image_wrapped(text, entities):
     """
-    Creates and returns a PIL Image that renders the full text using text wrapping.
-    For each wrapped line, if an entity phrase appears (as a substring), that substring is
-    highlighted with a pastel-colored rounded rectangle and its category label is drawn below.
+    Returns a PIL Image rendering the text with wrapped lines.
+    Any substring matching an entity is highlighted with a pastel-colored rounded rectangle,
+    and its category is drawn below the text.
     
-    Parameters:
-      text: The full text to render.
-      entities: A list of tuples (entity_text, category). (Entity phrases may contain spaces.)
+    Updates:
+      - Increased wrap_width from 80 to 120.
+      - Increased line_height from 30 to 40.
+      - Increased font sizes (primary from 18 to 24 and secondary from 14 to 18).
     """
-    # Define image dimensions and wrapping parameters
     img_width = 1000
-    wrap_width = 80  # maximum number of characters per line
+    wrap_width = 120  # increased to reduce unwanted wrapping for longer texts (e.g., addresses)
     wrapped_lines = textwrap.wrap(text, width=wrap_width)
-    line_height = 30
+    line_height = 40  # increased for bigger font spacing
     img_height = 40 + line_height * len(wrapped_lines)
     
     img = Image.new("RGB", (img_width, img_height), "white")
     draw = ImageDraw.Draw(img)
     
     try:
-        font = ImageFont.truetype("arial.ttf", 18)
-        font_small = ImageFont.truetype("arial.ttf", 14)
+        font = ImageFont.truetype("arial.ttf", 24)  # bigger primary font
+        font_small = ImageFont.truetype("arial.ttf", 18)  # bigger secondary font
     except IOError:
         font = ImageFont.load_default()
         font_small = ImageFont.load_default()
     
     # Define pastel colors for categories.
     colors = {
-        "People Name": "#FFB6C1",   # Light Pink
-        "Card Number": "#FFD700",   # Gold
-        "Account Number": "#FFA07A",   # Light Salmon
-        "Social Security Number": "#FA8072",   # Salmon
-        "Government ID Number": "#FF8C00",   # Dark Orange
-        "Date of Birth": "#98FB98",   # Pale Green
-        "Password": "#8A2BE2",   # Blue Violet
-        "Tax ID Number": "#DC143C",   # Crimson
-        "Phone Number": "#32CD32",   # Lime Green
-        "Residential Address": "#4682B4",   # Steel Blue
-        "Email Address": "#87CEEB",   # Sky Blue
-        "IP Number": "#20B2AA",   # Light Sea Green
-        "Passport": "#A020F0",   # Purple
-        "Driver License": "#D2691E",   # Chocolate,
-        "Organization": "#C0C0C0"  # Silver
+        "People Name": "#FFB6C1",
+        "Card Number": "#FFD700",
+        "Account Number": "#FFA07A",
+        "Social Security Number": "#FA8072",
+        "Government ID Number": "#FF8C00",
+        "Date of Birth": "#98FB98",
+        "Password": "#8A2BE2",
+        "Tax ID Number": "#DC143C",
+        "Phone Number": "#32CD32",
+        "Residential Address": "#4682B4",
+        "Email Address": "#87CEEB",
+        "IP Number": "#20B2AA",
+        "Passport": "#A020F0",
+        "Driver License": "#D2691E",
+        "Organization": "#C0C0C0"
     }
     
-    # We assume entities is a list of tuples (entity_text, category)
     y = 20
     for line in wrapped_lines:
         x = 20
-        # Draw the line normally first.
         draw.text((x, y), line, fill="black", font=font)
         # For each entity, check if it appears in this line.
         for entity_text, category in entities:
             index = line.find(entity_text)
             if index != -1:
-                # Compute x coordinate of the entity substring within the line.
                 prefix = line[:index]
                 prefix_bbox = draw.textbbox((0, 0), prefix, font=font)
                 x_start = x + (prefix_bbox[2] - prefix_bbox[0])
-                # Compute the size of the entity substring.
                 entity_bbox = draw.textbbox((0, 0), entity_text, font=font)
                 entity_width = entity_bbox[2] - entity_bbox[0]
                 entity_height = entity_bbox[3] - entity_bbox[1]
-                # Draw a rounded rectangle behind the entity.
                 padding = 2
                 rect = [x_start - padding, y - padding, x_start + entity_width + padding, y + entity_height + padding]
                 draw.rounded_rectangle(rect, fill=colors.get(category, "#FFB6C1"), radius=5)
-                # Redraw the entity text on top.
                 draw.text((x_start, y), entity_text, fill="black", font=font)
-                # Draw the category label below the entity in a smaller gray font.
                 draw.text((x_start, y + entity_height + 2), category, fill="gray", font=font_small)
         y += line_height
     return img
@@ -239,16 +232,22 @@ def train_model(model, train_dataset, val_dataset, epochs=25):
 def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pred, categories,
                                        train_labels, val_labels, val_sentences, model, raw_data,
                                        output_dir, threshold=0.5, bin_size=5):
-    print("[INFO] Creating combined post-training charts...")
-    y_pred_binary = (y_pred >= threshold).astype(int)
     num_categories = len(categories)
+    y_pred_binary = (y_pred >= threshold).astype(int)
     num_conf_rows = math.ceil(num_categories / 4)
-    total_rows = 7 + num_conf_rows
 
+    # Define number of rows for each section:
+    TOP_CHART_ROWS = 6    # Rows 0-5: training history, distribution, heatmap, metrics table, balance, inference performance
+    HIGHLIGHT_ROWS = 4    # Rows 6-9: highlighted samples (4 rows x 2 columns = 8 cells)
+    base_conf = TOP_CHART_ROWS + HIGHLIGHT_ROWS  # Confusion matrices start from this row index
+    total_rows = TOP_CHART_ROWS + HIGHLIGHT_ROWS + num_conf_rows
+
+    # Create figure and gridspec with the new total rows.
     fig = plt.figure(figsize=(20, 6 * total_rows))
     gs = gridspec.GridSpec(total_rows, 4, figure=fig)
 
-    # Row 0: Training History
+    # --- Top Charts (Rows 0-5) ---
+    # Row 0: Training History (4 subplots)
     metrics_list = ["loss", "accuracy", "precision", "recall"]
     for i, metric in enumerate(metrics_list):
         ax = fig.add_subplot(gs[0, i])
@@ -268,7 +267,7 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
     ax_dist.set_ylabel("Count")
     ax_dist.set_title("Sample Count per Category")
 
-    # Row 2: Entity Category vs. Binned Sentence Length Heatmap
+    # Row 2: Heatmap of Entity Category vs. Binned Sentence Length
     counts_dict = {}
     for sample in raw_data:
         sentence = sample.get("sentence", "")
@@ -288,7 +287,7 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
     ax_heat.set_xlabel("Entity Category")
     ax_heat.set_ylabel("Sentence Length Bins (words)")
     ax_heat.set_title("Heatmap: Entity Category vs. Binned Sentence Length")
-    
+
     # Row 3: Per-Category Metrics Table
     per_cat_data = []
     for i, cat in enumerate(categories):
@@ -332,7 +331,7 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
     ax_bar.set_title("Training/Validation Dataset & Category Balance")
     ax_bar.legend()
 
-    # Row 5: Inference Performance Bar Chart
+    # Row 5: Inference Performance Bar Chart by Sentence Length Bin
     bin_times = {}
     bin_cat_counts = {}
     for sentence in val_sentences:
@@ -364,40 +363,46 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
     ax_perf.set_title("Inference Performance Metrics by Sentence Length Bin")
     ax_perf.legend()
 
-    # Row 6: Embed a PIL-generated highlighted text image using text wrapping.
-    ax_highlight = fig.add_subplot(gs[6, :])
-    ax_highlight.axis("off")
-    sample_sentence = None
-    sample_info = None
-    # Search for a sample sentence in the validation set with entity info.
+    # --- Highlighted Samples Grid (Rows 6-9) ---
+    max_highlights = HIGHLIGHT_ROWS * 2  # 2 columns * 4 rows = 8 samples
+    highlight_samples = []
     for sent in val_sentences:
         info = get_sample_by_sentence(sent, raw_data)
         if info and "entities" in info and info["entities"]:
-            sample_sentence = sent
-            sample_info = info
+            highlight_samples.append((sent, info))
+        if len(highlight_samples) >= max_highlights:
             break
-    if sample_sentence is not None:
-        sample_sentence = str(sample_sentence)  # ensure plain Python string
-        # Get the model's prediction for the sample sentence.
-        pred = model.predict([sample_sentence])[0]
-        pred_binary = (pred >= 0.5).astype(int)
-        predicted_categories = [categories[i] for i, val in enumerate(pred_binary) if val == 1]
-        # Filter the ground-truth entities: only keep those whose category is predicted.
-        orig_entities = sample_info["entities"]
-        filtered_entities = [ent for ent in orig_entities if ent.get("category") in predicted_categories]
-        if not filtered_entities:
-            filtered_entities = orig_entities
-        filtered_entities = convert_entities(filtered_entities)
-        pil_img = get_highlighted_text_image_wrapped(sample_sentence, filtered_entities)
-        img_array = np.array(pil_img)
-        ax_highlight.imshow(img_array)
-        ax_highlight.set_title("Predicted Highlighted Sample Text", fontsize=12, fontweight="bold")
-    else:
-        ax_highlight.text(0.5, 0.5, "No sample with entity info", horizontalalignment="center", verticalalignment="center")
-    
-    # Rows 7+: Confusion Matrices for Each Category
+
+    for idx in range(max_highlights):
+        row_idx = TOP_CHART_ROWS + (idx // 2)  # Rows 6 to 9
+        col_idx = idx % 2
+        # Each sample spans 2 columns.
+        if col_idx == 0:
+            ax = fig.add_subplot(gs[row_idx, 0:2])
+        else:
+            ax = fig.add_subplot(gs[row_idx, 2:4])
+        ax.axis("off")
+        if idx < len(highlight_samples):
+            sample_sentence, sample_info = highlight_samples[idx]
+            sample_sentence = str(sample_sentence)
+            pred = model.predict([sample_sentence])[0]
+            pred_binary = (pred >= threshold).astype(int)
+            predicted_categories = [categories[i] for i, val in enumerate(pred_binary) if val == 1]
+            orig_entities = sample_info["entities"]
+            filtered_entities = [ent for ent in orig_entities if ent.get("category") in predicted_categories]
+            if not filtered_entities:
+                filtered_entities = orig_entities
+            filtered_entities = convert_entities(filtered_entities)
+            pil_img = get_highlighted_text_image_wrapped(sample_sentence, filtered_entities)
+            img_array = np.array(pil_img)
+            ax.imshow(img_array)
+            ax.set_title(f"Sample {idx+1}", fontsize=12)
+        else:
+            ax.text(0.5, 0.5, "No sample", horizontalalignment="center", verticalalignment="center")
+
+    # --- Confusion Matrices (Rows base_conf onward) ---
     for idx, cat in enumerate(categories):
-        row_idx = 7 + idx // 4
+        row_idx = base_conf + (idx // 4)
         col_idx = idx % 4
         ax_cm = fig.add_subplot(gs[row_idx, col_idx])
         cm = confusion_matrix(y_true[:, idx], y_pred_binary[:, idx])
@@ -415,20 +420,23 @@ def plot_combined_post_training_charts(history, sentences, labels, y_true, y_pre
         acc = (TP + TN) / total if total > 0 else 0
         prec = TP / (TP + FP) if (TP + FP) > 0 else 0
         rec = TP / (TP + FN) if (TP + FN) > 0 else 0
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False, ax=ax_cm,
-                    xticklabels=["Pred 0", "Pred 1"], yticklabels=["True 0", "True 1"])
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False,
+                    xticklabels=["Pred 0", "Pred 1"], yticklabels=["True 0", "True 1"], ax=ax_cm)
         ax_cm.set_title(f"{cat}")
         ax_cm.text(0.5, -0.3, f"Acc: {acc:.2f}\nPrec: {prec:.2f}\nRec: {rec:.2f}",
                    fontsize=10, ha="center", transform=ax_cm.transAxes)
     
-    total_conf_plots = num_conf_rows * 4
-    for extra in range(num_categories, total_conf_plots):
-        row_idx = 7 + extra // 4
+    # Turn off any extra subplots in the confusion matrix area.
+    num_conf_plots = num_conf_rows * 4
+    for extra in range(num_categories, num_conf_plots):
+        row_idx = base_conf + (extra // 4)
         col_idx = extra % 4
         ax_empty = fig.add_subplot(gs[row_idx, col_idx])
         ax_empty.axis('off')
     
-    plt.subplots_adjust(hspace=1.0, wspace=0.5)
+    # Adjust spacing to reduce padding while preserving all sections.
+    plt.subplots_adjust(hspace=0.8, wspace=0.5)
+    
     combined_path = os.path.join(output_dir, "combined_post_training_charts.png")
     plt.savefig(combined_path)
     plt.close()
@@ -513,7 +521,7 @@ def main():
     print(f"[INFO] Labels saved to {labels_save_path}")
     
     model = build_model(num_categories=len(categories))
-    history = train_model(model, train_dataset, val_dataset, epochs=50)
+    history = train_model(model, train_dataset, val_dataset, epochs=100)
     
     model.save(model_save_path)
     print(f"[INFO] Final model saved to {model_save_path}")
