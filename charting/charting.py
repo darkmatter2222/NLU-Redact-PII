@@ -66,31 +66,57 @@ class ChartPlotter:
         """
         Returns a PIL Image rendering the text with wrapped lines.
         Any substring matching an entity is highlighted with a pastel-colored rounded rectangle.
+        This version dynamically computes the wrap width based on the available image width,
+        ensuring words aren’t chopped off and better utilizing the image real estate.
         """
+        # Configuration
         img_width = 1000
-        wrap_width = 120  # increased to reduce unwanted wrapping for longer texts
-        wrapped_lines = textwrap.wrap(text, width=wrap_width)
-        line_height = 40  # increased line height for better readability
-        img_height = 40 + line_height * len(wrapped_lines)
-        
-        img = Image.new("RGB", (img_width, img_height), "white")
-        draw = ImageDraw.Draw(img)
-        
+        margin_x = 20
+        margin_y = 20
+
+        # Load fonts (using try/except in case the custom font is unavailable)
         try:
             font = ImageFont.truetype("arial.ttf", 24)
             font_small = ImageFont.truetype("arial.ttf", 18)
         except IOError:
             font = ImageFont.load_default()
             font_small = ImageFont.load_default()
-        
-        y = 20
+
+        # Compute the average character width using getbbox.
+        bbox = font.getbbox("A")
+        char_width = bbox[2] - bbox[0]
+        # Determine how many characters fit in the available width.
+        available_width = img_width - 2 * margin_x
+        wrap_chars = max(1, available_width // char_width)
+
+        # Wrap the text without breaking long words.
+        wrapped_lines = textwrap.wrap(
+            text,
+            width=wrap_chars,
+            break_long_words=False,
+            break_on_hyphens=False
+        )
+
+        # Calculate line height using getbbox for a representative text.
+        bbox_line = font.getbbox("Ay")
+        line_height = (bbox_line[3] - bbox_line[1]) + 10  # add extra spacing
+        img_height = 2 * margin_y + line_height * len(wrapped_lines)
+
+        # Create the image canvas.
+        img = Image.new("RGB", (img_width, img_height), "white")
+        draw = ImageDraw.Draw(img)
+
+        # Draw each line starting at the defined margins.
+        y = margin_y
         for line in wrapped_lines:
-            x = 20
+            x = margin_x
             draw.text((x, y), line, fill="black", font=font)
-            # For each entity, check if it appears in this line.
+
+            # Highlight entities that appear in this line.
             for entity_text, category in entities:
                 index = line.find(entity_text)
                 if index != -1:
+                    # Compute the x-offset for the entity within the line.
                     prefix = line[:index]
                     prefix_bbox = draw.textbbox((0, 0), prefix, font=font)
                     x_start = x + (prefix_bbox[2] - prefix_bbox[0])
@@ -101,9 +127,13 @@ class ChartPlotter:
                     rect = [x_start - padding, y - padding, x_start + entity_width + padding, y + entity_height + padding]
                     draw.rounded_rectangle(rect, fill=self.colors.get(category, "#FFB6C1"), radius=5)
                     draw.text((x_start, y), entity_text, fill="black", font=font)
+                    # Optionally, draw the category label below the entity text.
                     draw.text((x_start, y + entity_height + 2), category, fill="gray", font=font_small)
             y += line_height
+
         return img
+
+
 
     def plot_combined_post_training_charts(self, history, sentences, labels, y_true, y_pred, categories,
                                            train_labels, val_labels, val_sentences, model, raw_data,
