@@ -13,69 +13,85 @@ except ImportError:
 def generate_people_name(use_real_name=False):
     """
     Generate a person's name using one of two methods.
-    
+
     Depending on the input and randomness, the function may return:
       - Only a first name.
       - Only a last name.
       - A first and last name.
       - A first name with a middle initial and a last name.
-    
-    If `use_real_name` is True and the Faker library is available, the name parts are
-    generated using realistic names. Otherwise, each name part is randomly constructed
-    from letters with a randomly chosen style (all upper-case, all lower-case, or a "proper"
-    style where the first letter is randomly capitalized).
-    
+
+    Regardless of whether Faker is used or not, the name parts are styled
+    using a randomly chosen letter style (all upper-case, all lower-case, or “proper”)
+    and—in the case of a middle initial—the letter’s case is randomized and it may
+    or may not be followed by a period.
+
     Args:
         use_real_name (bool): If True (and Faker is available), use Faker to generate realistic names.
-    
+
     Returns:
         str: The generated name.
     """
-    # Define the possible name formats.
-    # We assign weights so that a full name is more common than a single name.
+    # Define possible name formats and choose one.
     name_formats = ["first", "last", "first_last", "first_middle_last"]
     chosen_format = random.choices(name_formats, weights=[1, 1, 2, 1])[0]
-    
-    # If using Faker and it's available, generate realistic name parts.
-    if use_real_name and faker_available:
-        fake = Faker()
-        if chosen_format == "first":
-            return fake.first_name()
-        elif chosen_format == "last":
-            return fake.last_name()
-        elif chosen_format == "first_last":
-            return f"{fake.first_name()} {fake.last_name()}"
-        elif chosen_format == "first_middle_last":
-            # For a middle initial, we simply choose a random uppercase letter.
-            middle_initial = random.choice(string.ascii_uppercase)
-            return f"{fake.first_name()} {middle_initial}. {fake.last_name()}"
-    
-    # Otherwise, generate a random name using random letters.
-    # Generate random first and last name components.
-    first_length = random.randint(3, 10)
-    last_length = random.randint(3, 10)
-    first_name = ''.join(random.choices(string.ascii_lowercase, k=first_length))
-    last_name = ''.join(random.choices(string.ascii_lowercase, k=last_length))
-    
-    # Randomly choose a style for letter casing.
-    # 'upper': all letters become uppercase.
-    # 'lower': letters remain lowercase.
-    # 'proper': only the first letter is randomly chosen to be uppercase or lowercase.
+
+    # Choose a random style to apply to the name parts.
     style = random.choice(['upper', 'lower', 'proper'])
-    
+
     def apply_style(word):
+        """Apply the chosen style to a string."""
         if style == 'upper':
             return word.upper()
         elif style == 'lower':
             return word.lower()
         elif style == 'proper':
+            # For "proper", randomly decide if the first letter is uppercase or lowercase.
             return (word[0].upper() if random.choice([True, False]) else word[0].lower()) + word[1:]
     
-    # Apply the chosen style to the generated first and last names.
-    first_name = apply_style(first_name)
-    last_name = apply_style(last_name)
-    
-    # Decide which format to return.
+    # Initialize name parts.
+    first_name = ""
+    last_name = ""
+    middle_initial = None
+
+    if use_real_name and faker_available:
+        fake = Faker()
+        if chosen_format in ["first", "first_last", "first_middle_last"]:
+            first_name = fake.first_name()
+        if chosen_format in ["last", "first_last", "first_middle_last"]:
+            last_name = fake.last_name()
+        if chosen_format == "first_middle_last":
+            # Initially choose a letter from ascii_uppercase.
+            middle_initial = random.choice(string.ascii_uppercase)
+    else:
+        if chosen_format in ["first", "first_last", "first_middle_last"]:
+            first_length = random.randint(3, 10)
+            first_name = ''.join(random.choices(string.ascii_lowercase, k=first_length))
+        if chosen_format in ["last", "first_last", "first_middle_last"]:
+            last_length = random.randint(3, 10)
+            last_name = ''.join(random.choices(string.ascii_lowercase, k=last_length))
+        if chosen_format == "first_middle_last":
+            # Initially choose a letter from ascii_lowercase.
+            middle_initial = random.choice(string.ascii_lowercase)
+
+    # Apply the chosen style to the first and last names (if they exist).
+    if first_name:
+        first_name = apply_style(first_name)
+    if last_name:
+        last_name = apply_style(last_name)
+
+    # If we need a middle initial, apply the style and randomly decide whether to include a dot.
+    if middle_initial is not None:
+        if style == 'upper':
+            middle_initial = middle_initial.upper()
+        elif style == 'lower':
+            middle_initial = middle_initial.lower()
+        elif style == 'proper':
+            middle_initial = middle_initial.upper() if random.choice([True, False]) else middle_initial.lower()
+        # Randomly decide whether to add a period.
+        dot = random.choice(['.', ''])
+        middle_initial = f"{middle_initial}{dot}"
+
+    # Build and return the final name based on the chosen format.
     if chosen_format == "first":
         return first_name
     elif chosen_format == "last":
@@ -83,15 +99,7 @@ def generate_people_name(use_real_name=False):
     elif chosen_format == "first_last":
         return f"{first_name} {last_name}"
     elif chosen_format == "first_middle_last":
-        # Generate a middle initial (a single random letter) and apply the same style.
-        middle_initial = random.choice(string.ascii_lowercase)
-        if style == 'upper':
-            middle_initial = middle_initial.upper()
-        elif style == 'lower':
-            middle_initial = middle_initial.lower()
-        elif style == 'proper':
-            middle_initial = middle_initial.upper() if random.choice([True, False]) else middle_initial.lower()
-        return f"{first_name} {middle_initial}. {last_name}"
+        return f"{first_name} {middle_initial} {last_name}"
 
 
 def generate_card_number():
