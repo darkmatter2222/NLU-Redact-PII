@@ -1,4 +1,5 @@
-import random
+import numpy as np  # random is broken from the granite model
+random = np.random.default_rng()
 import string
 from datetime import datetime, timedelta
 from faker import Faker
@@ -8,6 +9,32 @@ try:
     faker_available = True
 except ImportError:
     faker_available = False
+
+def np_choices(population, k, weights=None):
+    """
+    Mimics random.choices using NumPy's default_rng.
+    
+    Parameters:
+        population (list or str): A list or string of items to choose from.
+        k (int): Number of items to choose (with replacement).
+        weights (list or None): A list of relative weights for each item.
+    
+    Returns:
+        list: A list of k chosen items.
+    """
+    rng = np.random.default_rng()
+    
+    # If population is a string, convert it to a list of characters.
+    if isinstance(population, str):
+        population = list(population)
+    
+    if weights is not None:
+        # Ensure weights is a numpy array of floats and normalize them.
+        weights = np.array(weights, dtype=float)
+        weights = weights / weights.sum()
+    
+    # Use replace=True for sampling with replacement (mimicking random.choices).
+    return list(rng.choice(population, size=k, replace=True, p=weights))
 
 def randomize_case(word):
     """
@@ -85,7 +112,7 @@ def generate_people_name():
     """
     # Define possible name formats and choose one.
     name_formats = ["first", "last", "first_last", "first_middle_last"]
-    chosen_format = random.choices(name_formats, weights=[1, 1, 2, 1])[0]
+    chosen_format = np_choices(name_formats, weights=[1, 1, 2, 1])[0]
 
     # Choose a random style to apply to the name parts.
     style = random.choice(['upper', 'lower', 'proper'])
@@ -119,11 +146,11 @@ def generate_people_name():
             middle_initial = random.choice(string.ascii_uppercase)
     else:
         if chosen_format in ["first", "first_last", "first_middle_last"]:
-            first_length = random.randint(3, 10)
-            first_name = ''.join(random.choices(string.ascii_lowercase, k=first_length))
+            first_length = random.integers(3, 10)
+            first_name = ''.join(np_choices(string.ascii_lowercase, k=first_length))
         if chosen_format in ["last", "first_last", "first_middle_last"]:
-            last_length = random.randint(3, 10)
-            last_name = ''.join(random.choices(string.ascii_lowercase, k=last_length))
+            last_length = random.integers(3, 10)
+            last_name = ''.join(np_choices(string.ascii_lowercase, k=last_length))
         if chosen_format == "first_middle_last":
             # Choose a middle initial from lowercase letters initially.
             middle_initial = random.choice(string.ascii_lowercase)
@@ -157,48 +184,48 @@ def generate_people_name():
         return f"{first_name} {middle_initial} {last_name}"
 
 def generate_card_number():
-    return convert_alphanumerics(" ".join(''.join(random.choices(string.digits, k=4)) for _ in range(4)))
+    return convert_alphanumerics(" ".join(''.join(np_choices(string.digits, k=4)) for _ in range(4)))
 
 def generate_account_number():
-    return convert_alphanumerics(''.join(random.choices(string.digits, k=10)))
+    return convert_alphanumerics(''.join(np_choices(string.digits, k=10)))
 
 def generate_ssn():
-    part1 = ''.join(random.choices(string.digits, k=3))
-    part2 = ''.join(random.choices(string.digits, k=2))
-    part3 = ''.join(random.choices(string.digits, k=4))
+    part1 = ''.join(np_choices(string.digits, k=3))
+    part2 = ''.join(np_choices(string.digits, k=2))
+    part3 = ''.join(np_choices(string.digits, k=4))
     return convert_alphanumerics(f"{part1}-{part2}-{part3}")
 
 def generate_government_id():
-    letters = ''.join(random.choices(string.ascii_uppercase, k=2))
-    digits = ''.join(random.choices(string.digits, k=7))
+    letters = ''.join(np_choices(string.ascii_uppercase, k=2))
+    digits = ''.join(np_choices(string.digits, k=7))
     return convert_alphanumerics(letters + digits)
 
 def generate_dob():
     start_date = datetime(1950, 1, 1)
     end_date = datetime(2005, 12, 31)
     delta_days = (end_date - start_date).days
-    random_days = random.randint(0, delta_days)
+    random_days = random.integers(0, delta_days)
     dob = start_date + timedelta(days=random_days)
     return convert_alphanumerics(dob.strftime("%Y-%m-%d"))
 
 def generate_password():
     allowed_chars = string.ascii_letters + string.digits + "@#$%^&*"
-    length = random.randint(8, 16)
-    return convert_alphanumerics(''.join(random.choices(allowed_chars, k=length)))
+    length = random.integers(8, 16)
+    return convert_alphanumerics(''.join(np_choices(allowed_chars, k=length)))
 
 def generate_tax_id():
-    part1 = ''.join(random.choices(string.digits, k=2))
-    part2 = ''.join(random.choices(string.digits, k=7))
+    part1 = ''.join(np_choices(string.digits, k=2))
+    part2 = ''.join(np_choices(string.digits, k=7))
     return convert_alphanumerics(f"{part1}-{part2}")
 
 def generate_phone_number():
-    area = ''.join(random.choices(string.digits, k=3))
-    mid = ''.join(random.choices(string.digits, k=3))
-    last = ''.join(random.choices(string.digits, k=4))
+    area = ''.join(np_choices(string.digits, k=3))
+    mid = ''.join(np_choices(string.digits, k=3))
+    last = ''.join(np_choices(string.digits, k=4))
     return convert_alphanumerics(f"({area}) {mid}-{last}")
 
 def generate_address():
-    number = random.randint(100, 9999)
+    number = random.integers(100, 9999)
     street_names = ["Main", "Oak", "Pine", "Maple", "Cedar", "Elm", "Washington", "Lake", "Hill"]
     street_types = ["St", "Ave", "Rd", "Blvd", "Ln", "Dr"]
     street = random.choice(street_names)
@@ -206,35 +233,35 @@ def generate_address():
     return convert_alphanumerics(f"{number} {street} {street_type}")
 
 def generate_email_address():
-    username_length = random.randint(5, 10)
-    domain_length = random.randint(3, 8)
-    username = ''.join(random.choices(string.ascii_lowercase, k=username_length))
-    domain = ''.join(random.choices(string.ascii_lowercase, k=domain_length))
+    username_length = random.integers(5, 10)
+    domain_length = random.integers(3, 8)
+    username = ''.join(np_choices(string.ascii_lowercase, k=username_length))
+    domain = ''.join(np_choices(string.ascii_lowercase, k=domain_length))
     return convert_alphanumerics(f"{username}@{domain}.com")
 
 def generate_ip():
-    return convert_alphanumerics(".".join(str(random.randint(0, 255)) for _ in range(4)))
+    return convert_alphanumerics(".".join(str(random.integers(0, 255)) for _ in range(4)))
 
 def generate_passport():
     letter = random.choice(string.ascii_uppercase)
-    digits = ''.join(random.choices(string.digits, k=8))
+    digits = ''.join(np_choices(string.digits, k=8))
     return convert_alphanumerics(letter + digits)
 
 def generate_driver_license():
-    letter_count = random.randint(1, 2)
-    letters = ''.join(random.choices(string.ascii_uppercase, k=letter_count))
-    digit_count = random.randint(6, 8)
-    digits = ''.join(random.choices(string.digits, k=digit_count))
+    letter_count = random.integers(1, 2)
+    letters = ''.join(np_choices(string.ascii_uppercase, k=letter_count))
+    digit_count = random.integers(6, 8)
+    digits = ''.join(np_choices(string.digits, k=digit_count))
     return convert_alphanumerics(letters + digits)
 
 def add_noise(s, noise_level=0.15):
     noisy = s
     if random.random() < noise_level:
-        pos = random.randint(0, len(noisy))
+        pos = random.integers(0, len(noisy))
         noisy = noisy[:pos] + " " + noisy[pos:]
     if random.random() < noise_level:
         special_chars = "!@#$%^&*()_+-=[]{}|;:'\",.<>?/~`"
-        pos = random.randint(0, len(noisy))
+        pos = random.integers(0, len(noisy))
         noisy = noisy[:pos] + random.choice(special_chars) + noisy[pos:]
     if random.random() < noise_level and " " in noisy:
         space_positions = [i for i, c in enumerate(noisy) if c == " "]
