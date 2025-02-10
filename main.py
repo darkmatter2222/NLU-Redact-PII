@@ -44,13 +44,13 @@ generators = {
 
 def build_custom_prompt(data):
     prompt = (
-        """"You are an AI assistant. Your task is to generate a creative, coherent, and grammatically correct sentence that naturally incorporates the following variable values exactly as provided (case-sensitive). You must include each variable value exactly as provided, including all spaces, punctuation, and special characters. Do not modify, omit, or alter any value.
-
-IMPORTANT:
-1. You are permitted to internally generate and consider several variants. However, your final answer must be exactly one markdown code block tagged with `json` and nothing else.
-2. Inside that markdown code block, output valid JSON representing an object with a single key "sentence". The value associated with the "sentence" key must be the generated sentence.
-3. Do not include any other keys or any additional text outside the code block.
-4. Before submitting, ensure that every variable value below appears exactly as provided in your sentence. Do not use placeholders or additional keys.
+        """"You are an AI assistant. Your task is to generate a creative, coherent, and grammatically correct sentence(s) that naturally incorporates the following variable values exactly as provided (case-sensitive). You must include each variable value exactly as provided, including all spaces, punctuation, and special characters. Do not modify, omit, or alter any value.
+            Long Sentence!!!!!!!!!!!!!!!! Multi Sentience is OK too !   Consider doing multi sentence! 
+            IMPORTANT:
+            1. You are permitted to internally generate and consider several variants. However, your final answer must be exactly one markdown code block tagged with `json` and nothing else.
+            2. Inside that markdown code block, output valid JSON representing an object with a single key "sentence". The value associated with the "sentence" key must be the generated sentence(s).
+            3. Do not include any other keys or any additional text outside the code block.
+            4. Before submitting, ensure that every variable value below appears exactly as provided in your sentence(s). Do not use placeholders or additional keys.
 """
         "The variable values are:\n"
     )
