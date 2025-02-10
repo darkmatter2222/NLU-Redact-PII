@@ -10,6 +10,15 @@ try:
 except ImportError:
     faker_available = False
 
+def np_choice(seq):
+    """
+    Wrapper for random.choice that ensures if the input is a string,
+    it is first converted to a list of characters.
+    """
+    if isinstance(seq, str):
+        seq = list(seq)
+    return random.choice(seq)
+
 def np_choices(population, k, weights=None):
     """
     Mimics random.choices using NumPy's default_rng.
@@ -36,6 +45,25 @@ def np_choices(population, k, weights=None):
     # Use replace=True for sampling with replacement (mimicking random.choices).
     return list(rng.choice(population, size=k, replace=True, p=weights))
 
+def np_sample(population, k):
+    """
+    Mimics random.sample using NumPy's random generator.
+    
+    Parameters:
+        population (sequence): The collection to sample from.
+        k (int): The number of unique items to select.
+        
+    Returns:
+        list: A list of k randomly selected items (without replacement).
+    """
+    rng = np.random.default_rng()
+    # Ensure that the population is a list. If population is a string, convert it to a list of characters.
+    if isinstance(population, str):
+        population = list(population)
+    else:
+        population = list(population)
+    return list(rng.choice(population, size=k, replace=False))
+
 def randomize_case(word):
     """
     Given a string, randomly transform its case by choosing one of the following modes:
@@ -43,7 +71,7 @@ def randomize_case(word):
       - Entire string in uppercase
       - Entire string in lowercase
     """
-    mode = random.choice(['random', 'upper', 'lower'])
+    mode = np_choice(['random', 'upper', 'lower'])
     
     if mode == 'upper':
         return word.upper()
@@ -51,7 +79,7 @@ def randomize_case(word):
         return word.lower()
     else:
         # Mode 'random': Each character is randomly converted to upper or lower.
-        return ''.join(random.choice([char.lower(), char.upper()]) for char in word)
+        return ''.join(np_choice([char.lower(), char.upper()]) for char in word)
 
 def convert_alphanumerics(s):
     """
@@ -64,7 +92,7 @@ def convert_alphanumerics(s):
       "hello9world" -> "helloNiNeworld" (again, letter cases and spacing vary randomly)
     """
     # 50/50 decision: 50% chance to modify, 50% chance to return as-is.
-    if random.choice([True, False]):
+    if np_choice([True, False]):
         # Mapping from digit characters to their corresponding word (no extra spaces).
         digit_mapping = {
             '0': 'Zero', '1': 'One', '2': 'Two', '3': 'Three',
@@ -77,10 +105,10 @@ def convert_alphanumerics(s):
                 # Convert the digit to its word with randomly varying case.
                 converted = randomize_case(digit_mapping[char])
                 # Randomly add a space before the conversion.
-                if random.choice([True, False]):
+                if np_choice([True, False]):
                     converted = " " + converted
                 # Randomly add a space after the conversion.
-                if random.choice([True, False]):
+                if np_choice([True, False]):
                     converted = converted + " "
                 result.append(converted)
             else:
@@ -89,7 +117,6 @@ def convert_alphanumerics(s):
     else:
         # Return the original string unchanged.
         return s
-
 
 def generate_people_name():
     """
@@ -112,10 +139,10 @@ def generate_people_name():
     """
     # Define possible name formats and choose one.
     name_formats = ["first", "last", "first_last", "first_middle_last"]
-    chosen_format = np_choices(name_formats, weights=[1, 1, 2, 1])[0]
+    chosen_format = np_choices(name_formats, k=1, weights=[1, 1, 2, 1])[0]
 
     # Choose a random style to apply to the name parts.
-    style = random.choice(['upper', 'lower', 'proper'])
+    style = np_choice(['upper', 'lower', 'proper'])
 
     def apply_style(word):
         """Apply the chosen style to a string."""
@@ -125,10 +152,10 @@ def generate_people_name():
             return word.lower()
         elif style == 'proper':
             # For "proper", randomly decide if the first letter is uppercase or lowercase.
-            return (word[0].upper() if random.choice([True, False]) else word[0].lower()) + word[1:]
+            return (word[0].upper() if np_choice([True, False]) else word[0].lower()) + word[1:]
 
     # Decide randomly whether to use a realistic name (if Faker is available) or a random one.
-    use_real_name = faker_available and random.choice([True, False])
+    use_real_name = faker_available and np_choice([True, False])
 
     # Initialize name parts.
     first_name = ""
@@ -143,17 +170,17 @@ def generate_people_name():
             last_name = fake.last_name()
         if chosen_format == "first_middle_last":
             # Choose a middle initial from uppercase letters initially.
-            middle_initial = random.choice(string.ascii_uppercase)
+            middle_initial = np_choice(string.ascii_uppercase)
     else:
         if chosen_format in ["first", "first_last", "first_middle_last"]:
-            first_length = random.integers(3, 10)
+            first_length = int(random.integers(3, 10))
             first_name = ''.join(np_choices(string.ascii_lowercase, k=first_length))
         if chosen_format in ["last", "first_last", "first_middle_last"]:
-            last_length = random.integers(3, 10)
+            last_length = int(random.integers(3, 10))
             last_name = ''.join(np_choices(string.ascii_lowercase, k=last_length))
         if chosen_format == "first_middle_last":
             # Choose a middle initial from lowercase letters initially.
-            middle_initial = random.choice(string.ascii_lowercase)
+            middle_initial = np_choice(string.ascii_lowercase)
 
     # Apply the chosen style to the first and last names (if they exist).
     if first_name:
@@ -169,8 +196,8 @@ def generate_people_name():
         elif style == 'lower':
             middle_initial = middle_initial.lower()
         elif style == 'proper':
-            middle_initial = middle_initial.upper() if random.choice([True, False]) else middle_initial.lower()
-        dot = random.choice(['.', ''])
+            middle_initial = middle_initial.upper() if np_choice([True, False]) else middle_initial.lower()
+        dot = np_choice(['.', ''])
         middle_initial = f"{middle_initial}{dot}"
 
     # Build and return the final name based on the chosen format.
@@ -204,13 +231,13 @@ def generate_dob():
     start_date = datetime(1950, 1, 1)
     end_date = datetime(2005, 12, 31)
     delta_days = (end_date - start_date).days
-    random_days = random.integers(0, delta_days)
+    random_days = int(random.integers(0, delta_days))
     dob = start_date + timedelta(days=random_days)
     return convert_alphanumerics(dob.strftime("%Y-%m-%d"))
 
 def generate_password():
     allowed_chars = string.ascii_letters + string.digits + "@#$%^&*"
-    length = random.integers(8, 16)
+    length = int(random.integers(8, 16))
     return convert_alphanumerics(''.join(np_choices(allowed_chars, k=length)))
 
 def generate_tax_id():
@@ -225,46 +252,47 @@ def generate_phone_number():
     return convert_alphanumerics(f"({area}) {mid}-{last}")
 
 def generate_address():
-    number = random.integers(100, 9999)
+    number = int(random.integers(100, 9999))
     street_names = ["Main", "Oak", "Pine", "Maple", "Cedar", "Elm", "Washington", "Lake", "Hill"]
     street_types = ["St", "Ave", "Rd", "Blvd", "Ln", "Dr"]
-    street = random.choice(street_names)
-    street_type = random.choice(street_types)
+    street = np_choice(street_names)
+    street_type = np_choice(street_types)
     return convert_alphanumerics(f"{number} {street} {street_type}")
 
 def generate_email_address():
-    username_length = random.integers(5, 10)
-    domain_length = random.integers(3, 8)
+    username_length = int(random.integers(5, 10))
+    domain_length = int(random.integers(3, 8))
     username = ''.join(np_choices(string.ascii_lowercase, k=username_length))
     domain = ''.join(np_choices(string.ascii_lowercase, k=domain_length))
     return convert_alphanumerics(f"{username}@{domain}.com")
 
 def generate_ip():
-    return convert_alphanumerics(".".join(str(random.integers(0, 255)) for _ in range(4)))
+    # Ensure each call to random.integers is cast to int.
+    return convert_alphanumerics(".".join(str(int(random.integers(0, 255))) for _ in range(4)))
 
 def generate_passport():
-    letter = random.choice(string.ascii_uppercase)
+    letter = np_choice(string.ascii_uppercase)
     digits = ''.join(np_choices(string.digits, k=8))
     return convert_alphanumerics(letter + digits)
 
 def generate_driver_license():
-    letter_count = random.integers(1, 2)
+    letter_count = int(random.integers(1, 2))
     letters = ''.join(np_choices(string.ascii_uppercase, k=letter_count))
-    digit_count = random.integers(6, 8)
+    digit_count = int(random.integers(6, 8))
     digits = ''.join(np_choices(string.digits, k=digit_count))
     return convert_alphanumerics(letters + digits)
 
 def add_noise(s, noise_level=0.15):
     noisy = s
     if random.random() < noise_level:
-        pos = random.integers(0, len(noisy))
+        pos = int(random.integers(0, len(noisy)))
         noisy = noisy[:pos] + " " + noisy[pos:]
     if random.random() < noise_level:
         special_chars = "!@#$%^&*()_+-=[]{}|;:'\",.<>?/~`"
-        pos = random.integers(0, len(noisy))
-        noisy = noisy[:pos] + random.choice(special_chars) + noisy[pos:]
+        pos = int(random.integers(0, len(noisy)))
+        noisy = noisy[:pos] + np_choice(special_chars) + noisy[pos:]
     if random.random() < noise_level and " " in noisy:
         space_positions = [i for i, c in enumerate(noisy) if c == " "]
-        pos = random.choice(space_positions)
+        pos = np_choice(space_positions)
         noisy = noisy[:pos] + noisy[pos+1:]
     return noisy
