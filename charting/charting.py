@@ -76,6 +76,7 @@ class ChartPlotter:
         Render the provided text into a PIL image with wrapped lines.
         Substrings matching an entity are highlighted with a pastel-colored rounded rectangle.
         The wrap width is computed dynamically based on the available image width.
+        The text is centered horizontally and the line spacing is increased.
         """
         # Image configuration
         img_width = 1000
@@ -104,9 +105,13 @@ class ChartPlotter:
             break_on_hyphens=False
         )
 
-        # Compute line height (using representative text "Ay") and determine image height.
+        # Compute base text height using representative text "Ay"
         bbox_line = font.getbbox("Ay")
-        line_height = (bbox_line[3] - bbox_line[1]) + 10  # extra spacing
+        text_height = bbox_line[3] - bbox_line[1]
+        extra_spacing = 20  # Increased extra spacing for 2x line spacing
+        line_height = text_height + extra_spacing
+
+        # Determine overall image height.
         img_height = 2 * margin_y + line_height * len(wrapped_lines)
 
         # Create a white canvas and prepare for drawing.
@@ -116,11 +121,15 @@ class ChartPlotter:
         # Draw text line by line with entity highlighting.
         y = margin_y
         for line in wrapped_lines:
-            x = margin_x
-            # First, draw the plain text.
+            # Center the line horizontally in the available area.
+            line_bbox = font.getbbox(line)
+            text_width = line_bbox[2] - line_bbox[0]
+            x = margin_x + (available_width - text_width) / 2
+
+            # Draw the plain text line.
             draw.text((x, y), line, fill="black", font=font)
 
-            # Then, overlay entity highlights.
+            # Overlay entity highlights.
             for entity_text, category in entities:
                 index = line.find(entity_text)
                 if index != -1:
@@ -144,6 +153,7 @@ class ChartPlotter:
             y += line_height
 
         return img
+
 
     def _standardize_confusion_matrix(self, cm: np.ndarray) -> Tuple[np.ndarray, float, float, float, float]:
         """

@@ -132,7 +132,7 @@ def main():
     
     # Build and train the model.
     model = build_model(num_categories=len(categories))
-    history = train_model(model, train_dataset, val_dataset, epochs=100)
+    history = train_model(model, train_dataset, val_dataset, epochs=40)
     
     # Save the training statistics to a JSON file.
     training_stats_path = os.path.join(OUTPUT_DIR, "training_stats.json")

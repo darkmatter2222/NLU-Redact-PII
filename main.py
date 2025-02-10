@@ -1,4 +1,7 @@
-import random, time
+import time
+import numpy as np  # random is broken from the granite model
+random = np.random.default_rng()
+
 # Import data generators and helper functions from your package.
 from redact.data_generators import (
     generate_people_name,
@@ -17,7 +20,8 @@ from redact.data_generators import (
     generate_driver_license,
     add_noise
 )
-from redact.llama_integration import LlamaGenerator, validate_sentence
+#from redact.llama_integration import LlamaGenerator, validate_sentence
+from redact.granite_intergration import GraniteGenerator, validate_sentence
 from redact.synthetic_data import SyntheticDataWriter
 
 # Map each field to its generator function.
@@ -65,7 +69,7 @@ def build_entry(sentence, data):
 
 def main():
     # Create an instance of the LlamaGenerator and SyntheticDataWriter.
-    llama = LlamaGenerator()
+    llama = GraniteGenerator()
     file_path = r"O:\master_data_collection\redact\synthetic_data.json"
     writer = SyntheticDataWriter(file_path)
     
@@ -89,8 +93,8 @@ def main():
         score["iterations"] += 1
         try:
             # Randomly decide how many fields to generate (between 1 and 5).
-            num_fields = random.randint(1, 5)
-            selected_fields = random.sample(list(generators.keys()), num_fields)
+            num_fields = random.integers(1, 5)
+            selected_fields = random.choice(list(generators.keys()), num_fields)
     
             data = {}  # Holds field names and their (possibly noised) values.
             print("\nGenerated Fields:")
